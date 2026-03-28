@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { ResultsEvaluation } from '@/types/api';
+import { REVIEWER_TABLE_SURFACE_TEST_ID } from '@/components/layout/ReviewerTableSurface';
 import ResultsTable, { formatCreatedAt, summarizeReasoning } from './ResultsTable';
 
 const LONG_REASONING = [
@@ -50,10 +51,12 @@ describe('summarizeReasoning', () => {
 });
 
 describe('ResultsTable', () => {
-  it('renders the reviewer-visible primary contract fields in the main table', () => {
+  it('renders the shared reviewer overflow surface around reviewer-visible result fields', () => {
     const evaluation = createEvaluation();
     const html = renderToStaticMarkup(<ResultsTable evaluations={[evaluation]} />);
 
+    expect(html).toContain(`data-testid="${REVIEWER_TABLE_SURFACE_TEST_ID}"`);
+    expect(html).toContain('data-overflow-surface="reviewer-table"');
     expect(html).toContain('Submission');
     expect(html).toContain('Question');
     expect(html).toContain('Judge');
@@ -89,16 +92,18 @@ describe('ResultsTable', () => {
       />
     );
 
+    expect(html).toContain(`data-testid="${REVIEWER_TABLE_SURFACE_TEST_ID}"`);
     expect(html).toContain('SUB-001');
     expect(html).toContain('Judge Atlas');
     expect(html).toContain('Error');
     expect(html).toContain('—');
   });
 
-  it('renders an explicit empty state when filters match no evaluations', () => {
+  it('renders an explicit empty state when filters match no evaluations without a table surface', () => {
     const html = renderToStaticMarkup(<ResultsTable evaluations={[]} />);
 
     expect(html).toContain('No evaluations match the current filters.');
     expect(html).not.toContain('<table');
+    expect(html).not.toContain(`data-testid="${REVIEWER_TABLE_SURFACE_TEST_ID}"`);
   });
 });
