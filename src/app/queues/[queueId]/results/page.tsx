@@ -214,7 +214,7 @@ export default function ResultsPage({ params }: { params: Promise<{ queueId: str
             </Stack>
           </Paper>
 
-          <ResultsTable evaluations={results.evaluations} />
+          <ResultsTable queueId={queueId} evaluations={results.evaluations} />
 
           {results.total > results.pageSize ? (
             <Stack direction="row" spacing={1} justifyContent="center" mt={2}>

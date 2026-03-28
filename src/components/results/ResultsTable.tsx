@@ -17,12 +17,14 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material';
+import Link from 'next/link';
 import { useState } from 'react';
 import type { ResultsEvaluation } from '@/types/api';
 import ReviewerTableSurface from '@/components/layout/ReviewerTableSurface';
 import VerdictChip from './VerdictChip';
 
 export interface ResultsTableProps {
+  queueId: string;
   evaluations: ResultsEvaluation[];
 }
 
@@ -83,7 +85,13 @@ function AuditField({
   );
 }
 
-function ExpandableRow({ evaluation }: { evaluation: ResultsEvaluation }) {
+function ExpandableRow({
+  queueId,
+  evaluation,
+}: {
+  queueId: string;
+  evaluation: ResultsEvaluation;
+}) {
   const [open, setOpen] = useState(false);
   const reasoningSummary = summarizeReasoning(evaluation.reasoning);
   const hasFullReasoning = Boolean(evaluation.reasoning && evaluation.reasoning.trim().length > 0);
@@ -101,9 +109,24 @@ function ExpandableRow({ evaluation }: { evaluation: ResultsEvaluation }) {
           </IconButton>
         </TableCell>
         <TableCell sx={{ verticalAlign: 'top' }}>
-          <Typography fontFamily="monospace" fontSize={12}>
-            {evaluation.submission.external_id}
-          </Typography>
+          <Link
+            href={`/queues/${queueId}/submissions/${evaluation.submission.id}?source=results`}
+            prefetch={false}
+            aria-label={`Open submission ${evaluation.submission.external_id} from results`}
+            style={{ color: 'inherit', display: 'inline-block', textDecoration: 'none' }}
+          >
+            <Typography
+              fontFamily="monospace"
+              fontSize={12}
+              sx={{
+                textDecoration: 'underline',
+                textDecorationColor: 'divider',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {evaluation.submission.external_id}
+            </Typography>
+          </Link>
         </TableCell>
         <TableCell sx={{ verticalAlign: 'top', minWidth: 220 }}>
           <Stack spacing={0.5}>
@@ -191,7 +214,7 @@ function ExpandableRow({ evaluation }: { evaluation: ResultsEvaluation }) {
   );
 }
 
-export default function ResultsTable({ evaluations }: ResultsTableProps) {
+export default function ResultsTable({ queueId, evaluations }: ResultsTableProps) {
   if (evaluations.length === 0) {
     return (
       <Paper sx={{ p: 4, textAlign: 'center' }}>
@@ -216,7 +239,7 @@ export default function ResultsTable({ evaluations }: ResultsTableProps) {
         </TableHead>
         <TableBody>
           {evaluations.map((evaluation) => (
-            <ExpandableRow key={evaluation.id} evaluation={evaluation} />
+            <ExpandableRow key={evaluation.id} queueId={queueId} evaluation={evaluation} />
           ))}
         </TableBody>
       </Table>
