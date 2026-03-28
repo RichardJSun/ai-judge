@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "verify:s01-live": "bun run scripts/verify-s01-live.ts"
+    "verify:s01-live": "bun run scripts/verify-s01-live.ts",
+    "verify:s02-live": "bun run scripts/verify-s02-live.ts"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",
