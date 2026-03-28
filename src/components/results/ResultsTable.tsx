@@ -32,9 +32,12 @@ interface EvalRow {
   error_message: string | null;
   created_at: string;
   status: EvalStatusEnum | string | null;
-  submissions: { id: string; external_id: string };
-  question_templates: { id: string; external_id: string; question_text: string };
-  judges: { id: string; name: string; model: string };
+  submission?: { id: string; external_id: string };
+  question?: { id: string; external_id: string; question_text: string };
+  judge?: { id: string; name: string; model: string };
+  submissions?: { id: string; external_id: string };
+  question_templates?: { id: string; external_id: string; question_text: string };
+  judges?: { id: string; name: string; model: string };
 }
 
 interface ResultsTableProps {
@@ -51,6 +54,9 @@ function getRetryLabel(retryCount: number) {
 
 function ExpandableRow({ ev }: { ev: EvalRow }) {
   const [open, setOpen] = useState(false);
+  const submission = ev.submission ?? ev.submissions;
+  const question = ev.question ?? ev.question_templates;
+  const judge = ev.judge ?? ev.judges;
 
   return (
     <>
@@ -62,18 +68,18 @@ function ExpandableRow({ ev }: { ev: EvalRow }) {
         </TableCell>
         <TableCell>
           <Typography fontFamily="monospace" fontSize={12}>
-            {ev.submissions?.external_id ?? '—'}
+            {submission?.external_id ?? '—'}
           </Typography>
         </TableCell>
         <TableCell>
-          <Tooltip title={ev.question_templates?.question_text ?? ''}>
+          <Tooltip title={question?.question_text ?? ''}>
             <Typography fontSize={13} noWrap sx={{ maxWidth: 180 }}>
-              {ev.question_templates?.question_text ?? '—'}
+              {question?.question_text ?? '—'}
             </Typography>
           </Tooltip>
         </TableCell>
         <TableCell>
-          <Typography fontSize={13}>{ev.judges?.name ?? '—'}</Typography>
+          <Typography fontSize={13}>{judge?.name ?? '—'}</Typography>
         </TableCell>
         <TableCell>
           <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
