@@ -1,15 +1,18 @@
 import { z } from 'zod';
 
+const RequiredJudgeTextSchema = z.string().trim().min(1);
+const OptionalJudgeTextSchema = z.string().trim().min(1).optional();
+
 export const CreateJudgeSchema = z.object({
-  name: z.string().min(1),
-  system_prompt: z.string().min(1),
-  model: z.string().min(1),
+  name: RequiredJudgeTextSchema,
+  system_prompt: RequiredJudgeTextSchema,
+  model: RequiredJudgeTextSchema,
   active: z.boolean().optional().default(true),
 });
 
 export const UpdateJudgeSchema = z.object({
-  name: z.string().min(1).optional(),
-  system_prompt: z.string().min(1).optional(),
-  model: z.string().min(1).optional(),
+  name: OptionalJudgeTextSchema,
+  system_prompt: OptionalJudgeTextSchema,
+  model: OptionalJudgeTextSchema,
   active: z.boolean().optional(),
 });
