@@ -35,7 +35,14 @@ export default function JudgeForm({ initial, onSave, onCancel, submitLabel }: Ju
     setModel(initial?.model ?? 'openai/gpt-4o-mini');
     setActive(initial?.active ?? true);
     setError(null);
-  }, [initial?.id, initial?.updated_at]);
+  }, [
+    initial?.id,
+    initial?.updated_at,
+    initial?.name,
+    initial?.system_prompt,
+    initial?.model,
+    initial?.active,
+  ]);
 
   const trimmedName = useMemo(() => name.trim(), [name]);
   const trimmedPrompt = useMemo(() => systemPrompt.trim(), [systemPrompt]);
