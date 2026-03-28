@@ -10,7 +10,7 @@ import {
 } from '../src/lib/assignments/queue-assignment-state';
 import { parseJudgeList, parseJudgeRecord } from '../src/lib/judges/judge-lifecycle';
 import { parseResultsResponse } from '../src/lib/results/fetch-json';
-import type { ResultsEvaluation, ResultsResponse, UploadResult } from '../src/types/api';
+import type { ResultsEvaluation, UploadResult } from '../src/types/api';
 import type { Judge, QuestionTemplate, RunStatusEnum, VerdictEnum } from '../src/types/db';
 import {
   assertPersistedAudit,
