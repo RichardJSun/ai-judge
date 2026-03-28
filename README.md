@@ -92,6 +92,7 @@ With the local app running, the slice verifiers exercise the real workflow again
 bun run verify:s01-live -- --base-url http://localhost:3000
 bun run verify:s02-live -- --base-url http://localhost:3000
 bun run verify:s03-live -- --base-url http://localhost:3000
+bun run verify:s04-live -- --base-url http://localhost:3000
 ```
 
 What they prove:
@@ -99,8 +100,42 @@ What they prove:
 - `verify:s01-live` checks upload, run preview, run start, run polling, and persisted evaluation audit basics.
 - `verify:s02-live` checks upload/assignment/run wiring and the reviewer-facing judges lifecycle surface.
 - `verify:s03-live` checks the queue results workflow end to end, including real results persistence, judge/question/verdict filters, pass-rate aggregation, and the results page reachability.
+- `verify:s04-live` proves the full spec-ordered reviewer walkthrough end to end: upload → judges CRUD → assignment → run → results. It also emits the concrete queue, judge, question, assignment, run, page, and filtered API targets that a reviewer can copy directly into a browser follow-up.
 
-All three commands require a reachable Next.js app at `--base-url`. If you do not pass the flag, the scripts only fall back to `BASE_URL` when that env var is set.
+All four commands require a reachable Next.js app at `--base-url`. If you do not pass the flag, the scripts only fall back to `BASE_URL` when that env var is set.
+
+## S04 Final Conformance Walkthrough
+
+Use this when you need the final handoff proof from a fresh context window.
+
+1. **Start from a clean local stack**.
+   - `bun dev` must be running from this repo so Next.js loads `.env.local`.
+   - If you use local Supabase, confirm `bunx supabase status -o env` points at the same project your `.env.local` values target. A mixed local/hosted setup is the fastest way to get `/api/queues` or `/api/judges` 500s during verifier startup.
+   - Keep the verifier queue isolated to the built-in `queue_s04_live_proof` fixture namespace. The verifier intentionally clears only its own prior S04 assignments before baseline preview; it does not wipe unrelated queue history.
+
+2. **Run the live proof**.
+
+   ```bash
+   bun run verify:s04-live -- --base-url http://localhost:3000
+   ```
+
+3. **Copy the emitted identifiers from the `OK ...` line**.
+   - `queue` / `queueLabel` identify the persisted proof queue.
+   - `validJudge` and `invalidJudge` identify the two fresh verifier judges for this run.
+   - `questions=` encodes each tracked question as `questionId:validAssignmentId:invalidAssignmentId:answerCount`.
+   - `run=` encodes `runId:status:previewTotal/startedTotal:completedRows/erroredRows/retriedRows`.
+
+4. **Walk the reviewer flow in the same order as the spec**.
+   - **Upload** — open `http://localhost:3000/upload` and confirm **Upload Submissions**. The verifier already persisted `queueLabel`, so this page is the starting route reference rather than a page with emitted ids.
+   - **Judges CRUD** — open the emitted `judges=...`, `validJudgeDetail=...`, and `invalidJudgeDetail=...` targets from the `Inspect ...` line. Confirm the valid judge is the active reviewer path and the invalid judge exists as the known failing model used to prove mixed run outcomes.
+   - **Assign Judges** — open the emitted `assign=...` target and match the visible queue questions to the `questions=` summary ids and assignment ids.
+   - **Run Evaluations** — open the emitted `run=...` target. If you need API-level confirmation, use the `runStart=...` and `runProgress=...` URLs from the `APIs ...` line together with the `run=` summary token.
+   - **Results** — open the emitted `results=...` target and confirm **Results** plus the reviewer table. For current-proof isolation, use the emitted filtered `results=...` API URL from the `APIs ...` line because the visible results page is queue-scoped, not run-scoped.
+
+5. **Check the known local-proof gotchas before declaring success**.
+   - The results surface is queue-scoped history. Repeat runs append rows, so browser/UAT checks for the current proof must use the emitted verifier judge ids or the emitted filtered results API URL.
+   - `AI_GATEWAY_BASE_URL` should resolve to `https://ai-gateway.vercel.sh/v3/ai`. The app normalizes the legacy Vercel `/v1` base path, but the supported handoff contract is `/v3/ai` semantics.
+   - On the results page, expect clean console and network diagnostics while filters load and while the table/chart render. Treat browser console errors or failed fetch/XHR requests as proof failures, not as acceptable local noise.
 
 ## Supported Models
 
