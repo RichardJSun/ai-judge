@@ -19,6 +19,7 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { use } from 'react';
+import ReviewerTableSurface from '@/components/layout/ReviewerTableSurface';
 
 interface Submission {
   id: string;
@@ -54,11 +55,7 @@ export default function QueuePage({ params }: { params: Promise<{ queueId: strin
           >
             Run Evaluations
           </Button>
-          <Button
-            component={Link}
-            href={`/queues/${queueId}/results`}
-            startIcon={<BarChartIcon />}
-          >
+          <Button component={Link} href={`/queues/${queueId}/results`} startIcon={<BarChartIcon />}>
             Results
           </Button>
         </Stack>
@@ -77,32 +74,32 @@ export default function QueuePage({ params }: { params: Promise<{ queueId: strin
           <Typography variant="body2" color="text.secondary" mb={1}>
             {data.total} submission{data.total !== 1 ? 's' : ''}
           </Typography>
-          <Paper>
-            <Table>
+          <ReviewerTableSurface>
+            <Table sx={{ minWidth: 760 }}>
               <TableHead>
                 <TableRow>
-                  <TableCell>ID</TableCell>
-                  <TableCell>Task ID</TableCell>
-                  <TableCell>Submitted</TableCell>
+                  <TableCell sx={{ minWidth: 260 }}>ID</TableCell>
+                  <TableCell sx={{ minWidth: 220 }}>Task ID</TableCell>
+                  <TableCell sx={{ minWidth: 220, whiteSpace: 'nowrap' }}>Submitted</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {data.submissions.map((s) => (
                   <TableRow key={s.id} hover>
                     <TableCell>
-                      <Typography fontFamily="monospace" fontSize={13}>
+                      <Typography fontFamily="monospace" fontSize={13} sx={{ whiteSpace: 'nowrap' }}>
                         {s.external_id}
                       </Typography>
                     </TableCell>
-                    <TableCell>{s.labeling_task_id ?? '—'}</TableCell>
-                    <TableCell>
+                    <TableCell sx={{ whiteSpace: 'nowrap' }}>{s.labeling_task_id ?? '—'}</TableCell>
+                    <TableCell sx={{ whiteSpace: 'nowrap' }}>
                       {s.submitted_at ? new Date(s.submitted_at).toLocaleString() : '—'}
                     </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
-          </Paper>
+          </ReviewerTableSurface>
         </>
       )}
     </>
