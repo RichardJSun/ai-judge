@@ -95,7 +95,7 @@ describe('route contract guards', () => {
         },
         '/api/judges/judge-1 response'
       )
-    ).toThrow('Malformed /api/judges/judge-1 response.');
+    ).toThrow(/Malformed \/api\/judges\/judge-1 response: /);
   });
 
   it('pins the reviewer delete rejection contract', () => {

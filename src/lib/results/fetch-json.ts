@@ -80,7 +80,7 @@ export function parseResultsFilterQuestionList(
 ): ResultsFilterQuestion[] {
   const parsed = ResultsFilterQuestionListSchema.safeParse(value);
   if (!parsed.success) {
-    throw new Error(`Malformed ${context}.`);
+    throw new Error(`Malformed ${context}: ${parsed.error.message}`);
   }
 
   return parsed.data;
@@ -89,7 +89,7 @@ export function parseResultsFilterQuestionList(
 export function parseResultsResponse(value: unknown, context = 'results response'): ResultsResponse {
   const parsed = ResultsResponseSchema.safeParse(value);
   if (!parsed.success) {
-    throw new Error(`Malformed ${context}.`);
+    throw new Error(`Malformed ${context}: ${parsed.error.message}`);
   }
 
   return parsed.data;
