@@ -47,10 +47,13 @@ export async function executeRun(options: ExecuteRunOptions): Promise<void> {
       }
     });
 
-    const { total, errored } = await options.deps.getRunSummary(options.runId);
-    const finalStatus = total > 0 && errored === total ? 'error' : 'completed';
+    const finalStatus = resolveFinalRunStatus(await options.deps.getRunSummary(options.runId));
     await options.deps.updateRunStatus(options.runId, finalStatus);
   } catch {
     await options.deps.markRunError(options.runId);
   }
+}
+
+function resolveFinalRunStatus(summary: { total: number; errored: number }): 'completed' | 'error' {
+  return summary.total > 0 && summary.errored === summary.total ? 'error' : 'completed';
 }

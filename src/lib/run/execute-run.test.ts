@@ -74,7 +74,7 @@ describe('executeRun', () => {
     expect(state.markedError).toEqual([]);
   });
 
-  it('counts task failures and still completes the run when some evaluations succeed', async () => {
+  it('counts task failures so mixed runs stay completed but inspectable through errored counters', async () => {
     const tasks = [createTask(), createTask({ evaluationId: 'evaluation-2' })];
     const { deps, state } = createExecuteRunDeps({
       async evaluate(task) {
