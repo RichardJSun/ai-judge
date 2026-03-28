@@ -32,8 +32,8 @@ Create `.env.local`:
 
 ```env
 NEXT_PUBLIC_SUPABASE_URL=https://<project>.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=<anon-key>
-SUPABASE_SERVICE_ROLE_KEY=<service-role-key>
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=<publishable-key>
+SUPABASE_SECRET_KEY=<secret-key>
 AI_GATEWAY_API_KEY=<vercel-ai-gateway-key>
 AI_GATEWAY_BASE_URL=https://ai-gateway.vercel.sh/v1
 ```
