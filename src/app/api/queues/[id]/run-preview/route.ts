@@ -84,7 +84,11 @@ export async function GET(
     return NextResponse.json({
       total,
       inactiveAssignmentCount: inactiveAssignments.length,
-      breakdown: breakdown.map(({ submissionsWithAnswers, ...item }) => item),
+      breakdown: breakdown.map(({ questionText, judgeCount, excludedInactiveJudgeCount }) => ({
+        questionText,
+        judgeCount,
+        excludedInactiveJudgeCount,
+      })),
     });
   } catch (error) {
     if (error instanceof QueueAssignmentStateError) {
