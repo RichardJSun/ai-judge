@@ -8,7 +8,7 @@ An AI-powered evaluation platform that lets you upload submission queues, config
 Next.js 16 (App Router)
   ├── API Routes          — REST endpoints for all data operations
   ├── React 19 pages      — MUI + TanStack Query client UI
-  └── Vercel AI Gateway   — unified LLM routing via createGateway + generateObject
+  └── Vercel AI Gateway   — unified LLM routing via createGateway + AI SDK 6 structured output
 
 Supabase (Postgres)
   ├── 8 relational tables — queues, submissions, questions, judges, assignments, runs, evaluations
@@ -22,7 +22,7 @@ Supabase (Postgres)
 2. User creates AI judges (name, system prompt, model)
 3. User assigns one or more judges per question (queue-scoped)
 4. POST `/api/queues/[id]/runs` inserts evaluation rows and runs them with bounded concurrency (5 at a time)
-5. Each evaluation calls `generateObject` via AI Gateway with a Zod schema forcing `{verdict, reasoning}`
+5. Each evaluation calls `generateText` with `Output.object(...)` via AI Gateway with a Zod schema forcing `{verdict, reasoning}`
 6. UI polls `/api/queues/[id]/runs/[runId]` every 2s for progress
 7. Results page shows filtered evaluations + aggregate pass rate + per-judge bar chart
 
@@ -35,7 +35,7 @@ NEXT_PUBLIC_SUPABASE_URL=https://<project>.supabase.co
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=<publishable-key>
 SUPABASE_SECRET_KEY=<secret-key>
 AI_GATEWAY_API_KEY=<vercel-ai-gateway-key>
-AI_GATEWAY_BASE_URL=https://ai-gateway.vercel.sh/v1
+AI_GATEWAY_BASE_URL=https://ai-gateway.vercel.sh/v3/ai
 ```
 
 ## Local Setup

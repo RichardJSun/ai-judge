@@ -1,0 +1,24 @@
+[
+  {
+    "id": "sub_s02_1",
+    "queueId": "queue_s02",
+    "labelingTaskId": "task_s02",
+    "createdAt": 1690000000000,
+    "questions": [
+      {
+        "rev": 1,
+        "data": {
+          "id": "q_template_s02_1",
+          "questionType": "single_choice_with_reasoning",
+          "questionText": "Is the sky blue?"
+        }
+      }
+    ],
+    "answers": {
+      "q_template_s02_1": {
+        "choice": "yes",
+        "reasoning": "Observed on a clear day."
+      }
+    }
+  }
+]
