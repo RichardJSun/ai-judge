@@ -1,0 +1,110 @@
+[
+  {
+    "id": "sub_s03_1",
+    "queueId": "queue_s03_live_results",
+    "labelingTaskId": "task_s03_live_results",
+    "createdAt": 1711584000000,
+    "questions": [
+      {
+        "rev": 1,
+        "data": {
+          "id": "q_template_s03_live_1",
+          "questionType": "single_choice_with_reasoning",
+          "questionText": "Does the answer provide a grounded justification?"
+        }
+      },
+      {
+        "rev": 1,
+        "data": {
+          "id": "q_template_s03_live_2",
+          "questionType": "free_text",
+          "questionText": "Is the conclusion supported by the evidence?"
+        }
+      }
+    ],
+    "answers": {
+      "q_template_s03_live_1": {
+        "verdictHint": "pass",
+        "evidence": "Grounded in the cited source paragraph.",
+        "notes": "All required facts are referenced."
+      },
+      "q_template_s03_live_2": {
+        "verdictHint": "fail",
+        "evidence": "Conclusion conflicts with the supplied facts.",
+        "notes": "The answer overstates the result."
+      }
+    }
+  },
+  {
+    "id": "sub_s03_2",
+    "queueId": "queue_s03_live_results",
+    "labelingTaskId": "task_s03_live_results",
+    "createdAt": 1711584060000,
+    "questions": [
+      {
+        "rev": 1,
+        "data": {
+          "id": "q_template_s03_live_1",
+          "questionType": "single_choice_with_reasoning",
+          "questionText": "Does the answer provide a grounded justification?"
+        }
+      },
+      {
+        "rev": 1,
+        "data": {
+          "id": "q_template_s03_live_2",
+          "questionType": "free_text",
+          "questionText": "Is the conclusion supported by the evidence?"
+        }
+      }
+    ],
+    "answers": {
+      "q_template_s03_live_1": {
+        "verdictHint": "fail",
+        "evidence": "The answer ignores the strongest counterexample.",
+        "notes": "Reasoning is incomplete."
+      },
+      "q_template_s03_live_2": {
+        "verdictHint": "pass",
+        "evidence": "The final claim matches the evidence block.",
+        "notes": "No contradiction was found."
+      }
+    }
+  },
+  {
+    "id": "sub_s03_3",
+    "queueId": "queue_s03_live_results",
+    "labelingTaskId": "task_s03_live_results",
+    "createdAt": 1711584120000,
+    "questions": [
+      {
+        "rev": 1,
+        "data": {
+          "id": "q_template_s03_live_1",
+          "questionType": "single_choice_with_reasoning",
+          "questionText": "Does the answer provide a grounded justification?"
+        }
+      },
+      {
+        "rev": 1,
+        "data": {
+          "id": "q_template_s03_live_2",
+          "questionType": "free_text",
+          "questionText": "Is the conclusion supported by the evidence?"
+        }
+      }
+    ],
+    "answers": {
+      "q_template_s03_live_1": {
+        "verdictHint": "pass",
+        "evidence": "The explanation cites both the observation and the constraint.",
+        "notes": "Reasoning is specific and complete."
+      },
+      "q_template_s03_live_2": {
+        "verdictHint": "inconclusive",
+        "evidence": "The answer is too vague to confirm the conclusion.",
+        "notes": "Missing one key supporting detail."
+      }
+    }
+  }
+]
