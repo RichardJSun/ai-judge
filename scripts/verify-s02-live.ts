@@ -32,8 +32,8 @@ type QueueRow = {
   id: string;
   queue_id: string;
   created_at: string;
-  submission_count?: number;
-  question_count?: number;
+  submission_count: number | undefined;
+  question_count: number | undefined;
 };
 
 type PersistedQuestion = {

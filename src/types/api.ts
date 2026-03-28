@@ -16,16 +16,34 @@ export interface QuestionWithAssignments extends QuestionTemplate {
   assignments: (JudgeAssignment & { judge: Judge })[];
 }
 
-export interface EvaluationWithRelations extends Evaluation {
+export interface ResultsEvaluation {
+  id: Evaluation['id'];
+  verdict: Evaluation['verdict'];
+  reasoning: Evaluation['reasoning'];
+  model_used: Evaluation['model_used'];
+  tokens_used: Evaluation['tokens_used'];
+  latency_ms: Evaluation['latency_ms'];
+  retry_count: Evaluation['retry_count'];
+  error_message: Evaluation['error_message'];
+  created_at: Evaluation['created_at'];
+  status: Evaluation['status'];
   submission: Pick<Submission, 'id' | 'external_id'>;
   question: Pick<QuestionTemplate, 'id' | 'external_id' | 'question_text'>;
   judge: Pick<Judge, 'id' | 'name' | 'model'>;
 }
 
+export interface JudgePassRate {
+  judgeId: Judge['id'];
+  name: Judge['name'];
+  passRate: number;
+  total: number;
+}
+
 export interface ResultsResponse {
-  evaluations: EvaluationWithRelations[];
+  evaluations: ResultsEvaluation[];
   total: number;
   passRate: number;
+  judgePassRates: JudgePassRate[];
   page: number;
   pageSize: number;
 }
