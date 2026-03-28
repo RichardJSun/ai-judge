@@ -1,3 +1,8 @@
+import {
+  hydrateQuestionsWithAssignments,
+  parseQueueAssignmentList,
+  QueueAssignmentStateError,
+} from '@/lib/assignments/queue-assignment-state';
 import { createServiceClient } from '@/lib/supabase/server';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -8,42 +13,49 @@ export async function GET(
   const { id } = await params;
   const supabase = createServiceClient();
 
-  const { data: questions, error } = await supabase
-    .from('question_templates')
-    .select('id, external_id, question_type, question_text, created_at')
-    .eq('queue_id', id)
-    .order('created_at', { ascending: true });
+  const [questionsResult, assignmentsResult] = await Promise.all([
+    supabase
+      .from('question_templates')
+      .select('id, external_id, question_type, question_text, created_at')
+      .eq('queue_id', id)
+      .order('created_at', { ascending: true }),
+    supabase
+      .from('judge_assignments')
+      .select(
+        'id, queue_id, question_template_id, judge_id, prompt_fields, attachment_forwarding, created_at, judges(id, name, model, active)'
+      )
+      .eq('queue_id', id),
+  ]);
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
-  // Fetch assignments with judge info for each question
-  const questionRows = (questions ?? []) as Array<{
-    id: string;
-    external_id: string;
-    question_type: string | null;
-    question_text: string;
-    created_at: string;
-  }>;
-  const questionIds = questionRows.map((q) => q.id);
-  if (questionIds.length === 0) return NextResponse.json([]);
-
-  const { data: assignments } = await supabase
-    .from('judge_assignments')
-    .select('id, question_template_id, judge_id, prompt_fields, attachment_forwarding, created_at, judges(id, name, model, active)')
-    .eq('queue_id', id)
-    .in('question_template_id', questionIds);
-
-  const assignMap = new Map<string, typeof assignments>();
-  for (const a of assignments ?? []) {
-    const list = assignMap.get(a.question_template_id) ?? [];
-    list.push(a);
-    assignMap.set(a.question_template_id, list);
+  if (questionsResult.error) {
+    return NextResponse.json(
+      { error: 'Failed to load queue questions.', detail: questionsResult.error.message },
+      { status: 500 }
+    );
   }
 
-  const result = questionRows.map((q) => ({
-    ...q,
-    assignments: assignMap.get(q.id) ?? [],
-  }));
+  if (assignmentsResult.error) {
+    return NextResponse.json(
+      { error: 'Failed to load queue assignments.', detail: assignmentsResult.error.message },
+      { status: 500 }
+    );
+  }
 
-  return NextResponse.json(result);
+  try {
+    const assignments = parseQueueAssignmentList(assignmentsResult.data ?? [], {
+      context: `/api/queues/${id}/questions assignments`,
+    });
+    const hydratedQuestions = hydrateQuestionsWithAssignments(questionsResult.data ?? [], assignments);
+
+    return NextResponse.json(hydratedQuestions);
+  } catch (error) {
+    if (error instanceof QueueAssignmentStateError) {
+      return NextResponse.json(
+        { error: error.publicMessage, detail: error.message },
+        { status: error.status }
+      );
+    }
+
+    return NextResponse.json({ error: 'Failed to load queue questions.' }, { status: 500 });
+  }
 }

@@ -1,4 +1,9 @@
 import { evaluateSingle, runWithConcurrency } from '@/lib/ai/evaluator';
+import {
+  getActiveQueueAssignments,
+  parseQueueAssignmentList,
+  QueueAssignmentStateError,
+} from '@/lib/assignments/queue-assignment-state';
 import { createServiceClient } from '@/lib/supabase/server';
 import { executeRun, type ExecuteRunDeps } from '@/lib/run/execute-run';
 import { scheduleRunExecution, startRun, StartRunError, type StartRunDeps } from '@/lib/run/start-run';
@@ -15,15 +20,61 @@ export async function POST(
       const { data, error } = await supabase
         .from('judge_assignments')
         .select(
-          'id, question_template_id, judge_id, prompt_fields, judges(*), question_templates(id, question_text, question_type)'
+          'id, queue_id, question_template_id, judge_id, prompt_fields, attachment_forwarding, created_at, judges(id, name, system_prompt, model, active), question_templates(id, external_id, question_text, question_type, created_at)'
         )
         .eq('queue_id', queueId);
 
       if (error) {
-        throw new StartRunError(error.message, { status: 500, publicMessage: error.message, cause: error });
+        throw new StartRunError('Failed to load queue assignments.', {
+          status: 500,
+          publicMessage: 'Failed to load queue assignments.',
+          cause: error,
+        });
       }
 
-      return data ?? [];
+      try {
+        const assignments = parseQueueAssignmentList(data ?? [], {
+          context: `/api/queues/${queueId}/runs assignments`,
+          requireQuestion: true,
+          requireJudgeSystemPrompt: true,
+        });
+        const activeAssignments = getActiveQueueAssignments(assignments);
+
+        if (!activeAssignments.length && assignments.length > 0) {
+          throw new StartRunError('All persisted assignments target inactive judges.', {
+            status: 400,
+            publicMessage:
+              'All assigned judges for this queue are inactive. Reactivate a judge or add an active assignment before starting a run.',
+          });
+        }
+
+        return activeAssignments.map((assignment) => ({
+          question_template_id: assignment.question_template_id,
+          judge_id: assignment.judge_id,
+          prompt_fields: assignment.prompt_fields,
+          judges: {
+            id: assignment.judge.id,
+            name: assignment.judge.name,
+            system_prompt: assignment.judge.system_prompt,
+            model: assignment.judge.model,
+          },
+          question_templates: {
+            id: assignment.question?.id,
+            question_text: assignment.question?.question_text,
+            question_type: assignment.question?.question_type,
+          },
+        }));
+      } catch (error) {
+        if (error instanceof QueueAssignmentStateError) {
+          throw new StartRunError(error.message, {
+            status: error.status,
+            publicMessage: error.publicMessage,
+            cause: error,
+          });
+        }
+
+        throw error;
+      }
     },
     async getSubmissions(queueId) {
       const { data, error } = await supabase

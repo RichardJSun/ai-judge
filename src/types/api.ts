@@ -32,7 +32,12 @@ export interface ResultsResponse {
 
 export interface RunPreviewResponse {
   total: number;
-  breakdown: { questionText: string; judgeCount: number }[];
+  inactiveAssignmentCount: number;
+  breakdown: {
+    questionText: string;
+    judgeCount: number;
+    excludedInactiveJudgeCount?: number;
+  }[];
 }
 
 export interface RunResponse {
