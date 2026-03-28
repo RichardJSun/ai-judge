@@ -1,68 +1,241 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { ValidatedSubmission } from '@/lib/validators/upload';
 
-interface ParseResult {
+export interface ParseResult {
   queues: number;
   submissions: number;
   questions: number;
   answers: number;
 }
 
+export interface PersistSubmissionsOptions {
+  signal?: AbortSignal;
+}
+
+type PersistenceTable = 'queues' | 'question_templates' | 'submissions' | 'submission_answers';
+type PersistencePhase = 'schema' | 'upload';
+
+type QueryResult<T> = {
+  data: T | null;
+  error: { message?: string | null } | null;
+};
+
+export class UploadPersistenceError extends Error {
+  readonly phase: PersistencePhase;
+  readonly table: PersistenceTable;
+  readonly detail: string;
+  readonly guidance: string;
+  readonly status: number;
+
+  constructor({
+    message,
+    phase,
+    table,
+    detail,
+    guidance,
+    status,
+  }: {
+    message: string;
+    phase: PersistencePhase;
+    table: PersistenceTable;
+    detail: string;
+    guidance: string;
+    status: number;
+  }) {
+    super(message);
+    this.name = 'UploadPersistenceError';
+    this.phase = phase;
+    this.table = table;
+    this.detail = detail;
+    this.guidance = guidance;
+    this.status = status;
+  }
+}
+
+function errorMessage(error: unknown) {
+  if (error instanceof Error && error.message.trim()) {
+    return error.message.trim();
+  }
+
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    'message' in error &&
+    typeof error.message === 'string' &&
+    error.message.trim()
+  ) {
+    return error.message.trim();
+  }
+
+  if (typeof error === 'string' && error.trim()) {
+    return error.trim();
+  }
+
+  return 'Unknown storage error.';
+}
+
+function isSchemaDrift(detail: string, table: PersistenceTable) {
+  const lowerDetail = detail.toLowerCase();
+  const publicTable = `public.${table}`;
+
+  return (
+    lowerDetail.includes('schema cache') ||
+    lowerDetail.includes(`relation \"${publicTable}\" does not exist`) ||
+    lowerDetail.includes(`table '${publicTable}'`) ||
+    (lowerDetail.includes(publicTable) && lowerDetail.includes('does not exist'))
+  );
+}
+
+function isAbortLike(detail: string, signal?: AbortSignal) {
+  const lowerDetail = detail.toLowerCase();
+
+  return (
+    signal?.aborted === true ||
+    lowerDetail.includes('abort') ||
+    lowerDetail.includes('timed out') ||
+    lowerDetail.includes('timeout')
+  );
+}
+
+function createPersistenceError(table: PersistenceTable, cause: unknown, signal?: AbortSignal) {
+  const detail = errorMessage(cause);
+
+  if (isSchemaDrift(detail, table)) {
+    return new UploadPersistenceError({
+      message: `Upload failed because the Supabase ${table} table is missing or the schema cache is stale.`,
+      phase: 'schema',
+      table,
+      detail,
+      guidance: 'Run the latest Supabase migrations, refresh the schema cache, and retry the upload.',
+      status: 500,
+    });
+  }
+
+  if (isAbortLike(detail, signal)) {
+    return new UploadPersistenceError({
+      message: `Upload timed out while writing ${table}.`,
+      phase: 'upload',
+      table,
+      detail,
+      guidance: 'Retry the upload after confirming the queue data did not partially persist.',
+      status: 504,
+    });
+  }
+
+  return new UploadPersistenceError({
+    message: `Upload failed while writing ${table}.`,
+    phase: 'upload',
+    table,
+    detail,
+    guidance: 'Check the storage error detail and retry after fixing the underlying Supabase issue.',
+    status: 500,
+  });
+}
+
+function assertArrayResult<T>(table: PersistenceTable, data: T[] | null, operation: string): T[] {
+  if (!Array.isArray(data)) {
+    throw new UploadPersistenceError({
+      message: `Upload failed because ${table} returned an invalid ${operation} response.`,
+      phase: 'upload',
+      table,
+      detail: `Expected an array response from ${table} ${operation}.`,
+      guidance: 'Check the Supabase query contract and update the parser if the selected columns changed.',
+      status: 500,
+    });
+  }
+
+  return data;
+}
+
+async function runQuery<T>(
+  query: PromiseLike<QueryResult<T>> & { abortSignal?: (signal: AbortSignal) => PromiseLike<QueryResult<T>> },
+  signal?: AbortSignal
+) {
+  if (signal && typeof query.abortSignal === 'function') {
+    return await query.abortSignal(signal);
+  }
+
+  return await query;
+}
+
 export async function persistSubmissions(
   supabase: SupabaseClient,
-  items: ValidatedSubmission[]
+  items: ValidatedSubmission[],
+  options: PersistSubmissionsOptions = {}
 ): Promise<ParseResult> {
+  const { signal } = options;
   const counts: ParseResult = { queues: 0, submissions: 0, questions: 0, answers: 0 };
 
-  // Collect unique queue IDs
-  const queueIds = [...new Set(items.map((s) => s.queueId))];
+  const queueIds = [...new Set(items.map((submission) => submission.queueId))];
 
-  // 1. Upsert all queues in one call
-  const { data: queues, error: queueErr } = await supabase
+  const queueQuery = supabase
     .from('queues')
     .upsert(
-      queueIds.map((qid) => ({ queue_id: qid })),
+      queueIds.map((queueId) => ({ queue_id: queueId })),
       { onConflict: 'queue_id', ignoreDuplicates: false }
     )
     .select('id, queue_id');
-  if (queueErr) throw new Error(`Queue upsert failed: ${queueErr.message}`);
+  const { data: queuesData, error: queueError } = await runQuery(queueQuery, signal);
+  if (queueError) {
+    throw createPersistenceError('queues', queueError, signal);
+  }
 
-  counts.queues = queues?.length ?? 0;
-  const queueMap = new Map((queues ?? []).map((q: { queue_id: string; id: string }) => [q.queue_id, q.id]));
+  const queues = assertArrayResult<{ queue_id: string; id: string }>('queues', queuesData, 'upsert');
+  counts.queues = queues.length;
+  const queueMap = new Map(queues.map((queue) => [queue.queue_id, queue.id]));
 
-  // 2. Collect and upsert all question templates in one call
-  const allQuestionRows: { queue_id: string; external_id: string; question_type: string | null; question_text: string }[] = [];
+  const allQuestionRows: Array<{
+    queue_id: string;
+    external_id: string;
+    question_type: string | null;
+    question_text: string;
+  }> = [];
   for (const item of items) {
     const queueUuid = queueMap.get(item.queueId);
-    if (!queueUuid) continue;
-    for (const q of item.questions) {
+    if (!queueUuid) {
+      continue;
+    }
+
+    for (const question of item.questions) {
       allQuestionRows.push({
         queue_id: queueUuid,
-        external_id: q.data.id,
-        question_type: q.data.questionType ?? null,
-        question_text: q.data.questionText,
+        external_id: question.data.id,
+        question_type: question.data.questionType ?? null,
+        question_text: question.data.questionText,
       });
     }
   }
 
   if (allQuestionRows.length > 0) {
-    // Deduplicate by queue_id + external_id (keep last)
-    const dedupMap = new Map(allQuestionRows.map((r) => [`${r.queue_id}::${r.external_id}`, r]));
-    const uniqueQuestions = [...dedupMap.values()];
+    const deduplicatedQuestionRows = new Map(
+      allQuestionRows.map((row) => [`${row.queue_id}::${row.external_id}`, row])
+    );
+    const uniqueQuestions = [...deduplicatedQuestionRows.values()];
 
-    const { data: qtData, error: qtErr } = await supabase
+    const questionUpsertQuery = supabase
       .from('question_templates')
       .upsert(uniqueQuestions, { onConflict: 'queue_id,external_id', ignoreDuplicates: false })
       .select('id, external_id, queue_id');
-    if (qtErr) throw new Error(`Question template upsert failed: ${qtErr.message}`);
-    counts.questions = qtData?.length ?? 0;
+    const { data: questionData, error: questionError } = await runQuery(questionUpsertQuery, signal);
+    if (questionError) {
+      throw createPersistenceError('question_templates', questionError, signal);
+    }
+
+    const questionTemplates = assertArrayResult<{ id: string; external_id: string; queue_id: string }>(
+      'question_templates',
+      questionData,
+      'upsert'
+    );
+    counts.questions = questionTemplates.length;
   }
 
-  // 3. Upsert all submissions in one call
   const submissionRows = items
     .map((item) => {
       const queueUuid = queueMap.get(item.queueId);
-      if (!queueUuid) return null;
+      if (!queueUuid) {
+        return null;
+      }
+
       return {
         queue_id: queueUuid,
         external_id: item.id,
@@ -71,64 +244,96 @@ export async function persistSubmissions(
         raw_json: item,
       };
     })
-    .filter((r): r is NonNullable<typeof r> => r !== null);
+    .filter((row): row is NonNullable<typeof row> => row !== null);
 
-  if (submissionRows.length > 0) {
-    const { data: subData, error: subErr } = await supabase
-      .from('submissions')
-      .upsert(submissionRows, { onConflict: 'queue_id,external_id', ignoreDuplicates: false })
-      .select('id, external_id, queue_id');
-    if (subErr) throw new Error(`Submission upsert failed: ${subErr.message}`);
-    counts.submissions = subData?.length ?? 0;
+  if (submissionRows.length === 0) {
+    return counts;
+  }
 
-    // 4. Fetch all question template IDs once for answer mapping
-    const affectedQueueUuids = [...new Set(submissionRows.map((r) => r.queue_id))];
-    const { data: qtRows } = await supabase
-      .from('question_templates')
-      .select('id, external_id, queue_id')
-      .in('queue_id', affectedQueueUuids);
+  const submissionUpsertQuery = supabase
+    .from('submissions')
+    .upsert(submissionRows, { onConflict: 'queue_id,external_id', ignoreDuplicates: false })
+    .select('id, external_id, queue_id');
+  const { data: submissionData, error: submissionError } = await runQuery(submissionUpsertQuery, signal);
+  if (submissionError) {
+    throw createPersistenceError('submissions', submissionError, signal);
+  }
 
-    const qtMap = new Map(
-      (qtRows ?? []).map((qt: { id: string; external_id: string; queue_id: string }) => [
-        `${qt.queue_id}::${qt.external_id}`,
-        qt.id,
-      ])
-    );
+  const submissions = assertArrayResult<{ id: string; external_id: string; queue_id: string }>(
+    'submissions',
+    submissionData,
+    'upsert'
+  );
+  counts.submissions = submissions.length;
 
-    const subMap = new Map(
-      (subData ?? []).map((s: { id: string; external_id: string; queue_id: string }) => [
-        `${s.queue_id}::${s.external_id}`,
-        s.id,
-      ])
-    );
+  const affectedQueueUuids = [...new Set(submissionRows.map((row) => row.queue_id))];
+  const questionLookupQuery = supabase
+    .from('question_templates')
+    .select('id, external_id, queue_id')
+    .in('queue_id', affectedQueueUuids);
+  const { data: questionLookupData, error: questionLookupError } = await runQuery(questionLookupQuery, signal);
+  if (questionLookupError) {
+    throw createPersistenceError('question_templates', questionLookupError, signal);
+  }
 
-    // 5. Build and upsert all answers in one call
-    const allAnswerRows: { submission_id: string; question_template_id: string; answer_json: unknown }[] = [];
-    for (const item of items) {
-      const queueUuid = queueMap.get(item.queueId);
-      if (!queueUuid) continue;
-      const submissionId = subMap.get(`${queueUuid}::${item.id}`);
-      if (!submissionId) continue;
+  const questionTemplateRows = assertArrayResult<{ id: string; external_id: string; queue_id: string }>(
+    'question_templates',
+    questionLookupData,
+    'select'
+  );
+  const questionTemplateMap = new Map(
+    questionTemplateRows.map((questionTemplate) => [
+      `${questionTemplate.queue_id}::${questionTemplate.external_id}`,
+      questionTemplate.id,
+    ])
+  );
 
-      for (const [questionExternalId, answerData] of Object.entries(item.answers)) {
-        const qtId = qtMap.get(`${queueUuid}::${questionExternalId}`);
-        if (!qtId) continue;
-        allAnswerRows.push({
-          submission_id: submissionId,
-          question_template_id: qtId,
-          answer_json: answerData,
-        });
-      }
+  const submissionMap = new Map(
+    submissions.map((submission) => [`${submission.queue_id}::${submission.external_id}`, submission.id])
+  );
+
+  const allAnswerRows: Array<{
+    submission_id: string;
+    question_template_id: string;
+    answer_json: unknown;
+  }> = [];
+  for (const item of items) {
+    const queueUuid = queueMap.get(item.queueId);
+    if (!queueUuid) {
+      continue;
     }
 
-    if (allAnswerRows.length > 0) {
-      const { error: ansErr } = await supabase
-        .from('submission_answers')
-        .upsert(allAnswerRows, { onConflict: 'submission_id,question_template_id', ignoreDuplicates: true });
-      if (ansErr) throw new Error(`Answer upsert failed: ${ansErr.message}`);
-      counts.answers = allAnswerRows.length;
+    const submissionId = submissionMap.get(`${queueUuid}::${item.id}`);
+    if (!submissionId) {
+      continue;
+    }
+
+    for (const [questionExternalId, answerData] of Object.entries(item.answers)) {
+      const questionTemplateId = questionTemplateMap.get(`${queueUuid}::${questionExternalId}`);
+      if (!questionTemplateId) {
+        continue;
+      }
+
+      allAnswerRows.push({
+        submission_id: submissionId,
+        question_template_id: questionTemplateId,
+        answer_json: answerData,
+      });
     }
   }
 
+  if (allAnswerRows.length === 0) {
+    return counts;
+  }
+
+  const answerUpsertQuery = supabase
+    .from('submission_answers')
+    .upsert(allAnswerRows, { onConflict: 'submission_id,question_template_id', ignoreDuplicates: false });
+  const { error: answerError } = await runQuery(answerUpsertQuery, signal);
+  if (answerError) {
+    throw createPersistenceError('submission_answers', answerError, signal);
+  }
+
+  counts.answers = allAnswerRows.length;
   return counts;
 }
