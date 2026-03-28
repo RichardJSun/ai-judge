@@ -2,7 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import { parseArgs } from 'node:util';
 import type { EvalStatusEnum, RunStatusEnum, VerdictEnum } from '../src/types/db';
 
-type FetchLike = typeof fetch;
+type FetchLike = (url: string | URL | globalThis.Request, init?: RequestInit) => Promise<Response>;
 
 type QueueRow = {
   id: string;

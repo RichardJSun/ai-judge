@@ -44,7 +44,7 @@ describe('resolveRunProgressPresentation', () => {
   it('treats missing status as an invalid run state', () => {
     expect(
       resolveRunProgressPresentation({
-        status: undefined,
+        status: undefined as never,
         total: 1,
         completed: 0,
         errored: 0,

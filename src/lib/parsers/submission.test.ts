@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'bun:test';
-import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   handleUpload,
   MAX_UPLOAD_FILE_SIZE_BYTES,
@@ -11,6 +10,8 @@ import {
   type PersistSubmissionsOptions,
 } from '@/lib/parsers/submission';
 import type { ValidatedSubmission } from '@/lib/validators/upload';
+
+type PersistSubmissionsClient = Parameters<typeof persistSubmissions>[0];
 
 type PersistenceTable = 'queues' | 'question_templates' | 'submissions' | 'submission_answers';
 
@@ -138,8 +139,11 @@ class FakeSupabase {
   from(table: PersistenceTable) {
     return {
       upsert: (rows: Record<string, unknown>[], options: { ignoreDuplicates?: boolean }) =>
-        new FakeUpsertQuery((queryOptions) => this.upsert(table, rows, options, queryOptions)),
-      select: () => new FakeSelectQuery((queryOptions) => this.select(table, queryOptions)),
+        new FakeUpsertQuery<unknown>((queryOptions) => this.upsert(table, rows, options, queryOptions)),
+      select: () =>
+        new FakeSelectQuery<unknown>((queryOptions) =>
+          this.select(table, queryOptions) as FakeQueryResult<unknown>
+        ),
     };
   }
 
@@ -288,7 +292,7 @@ class FakeSupabase {
   private select(
     table: PersistenceTable,
     queryOptions: { signal?: AbortSignal; filter: { column: string; values: unknown[] } | null }
-  ) {
+  ): FakeQueryResult<unknown> {
     const aborted = this.maybeAbort(queryOptions.signal);
     if (aborted) {
       return aborted;
@@ -331,7 +335,7 @@ describe('persistSubmissions', () => {
     const supabase = new FakeSupabase();
 
     const firstWrite = await persistSubmissions(
-      supabase as unknown as SupabaseClient,
+      supabase as unknown as PersistSubmissionsClient,
       [baseSubmission]
     );
     expect(firstWrite).toEqual({ queues: 1, submissions: 1, questions: 1, answers: 1 });
@@ -346,7 +350,7 @@ describe('persistSubmissions', () => {
     };
 
     const secondWrite = await persistSubmissions(
-      supabase as unknown as SupabaseClient,
+      supabase as unknown as PersistSubmissionsClient,
       [correctedSubmission]
     );
 
@@ -507,6 +511,7 @@ describe('handleUpload storage diagnostics', () => {
             { once: true }
           );
         });
+        return {} as ParseResult;
       },
     });
     const body = await jsonBody<{ error: string; phase: string; detail: string }>(response);

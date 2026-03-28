@@ -13,6 +13,10 @@ import {
   VerifierPhaseError,
 } from './verify-m002-s02';
 
+type EnsureLocalAppReadyOptions = Parameters<typeof ensureLocalAppReady>[0];
+type FetchImpl = NonNullable<EnsureLocalAppReadyOptions['fetchImpl']>;
+type SpawnImpl = NonNullable<EnsureLocalAppReadyOptions['spawnImpl']>;
+
 function createSummary(overrides: Partial<LiveVerificationSummary> = {}): LiveVerificationSummary {
   return {
     queueId: 'queue-uuid-1',
@@ -139,11 +143,11 @@ describe('ensureLocalAppReady', () => {
 
     const guard = await ensureLocalAppReady({
       baseUrl: 'http://localhost:3000',
-      fetchImpl: (async () => new Response('[]', { status: 200 })) as typeof fetch,
+      fetchImpl: (async () => new Response('[]', { status: 200 })) as unknown as FetchImpl,
       spawnImpl: (() => {
         spawnCalls += 1;
         throw new Error('spawn should not be called');
-      }) as unknown as typeof import('node:child_process').spawn,
+      }) as unknown as SpawnImpl,
       probeTimeoutMs: 5,
       pollMs: 1,
       startupTimeoutMs: 10,
@@ -156,7 +160,7 @@ describe('ensureLocalAppReady', () => {
   it('auto-starts bun run dev when localhost is unreachable', async () => {
     const spawnCalls: Array<{ command: string; args: string[]; options: Record<string, unknown> }> = [];
     const child = {
-      exitCode: null,
+      exitCode: null as number | null,
       unrefCalls: 0,
       killCalls: 0,
       unref() {
@@ -179,13 +183,13 @@ describe('ensureLocalAppReady', () => {
         }
 
         return new Response('[]', { status: 200 });
-      }) as typeof fetch,
+      }) as unknown as FetchImpl,
       spawnImpl: ((command: string, args: string[], options: Record<string, unknown>) => {
         spawnCalls.push({ command, args, options });
         return child;
-      }) as unknown as typeof import('node:child_process').spawn,
+      }) as unknown as SpawnImpl,
       execPath: '/fake/bun',
-      env: {},
+      env: {} as NodeJS.ProcessEnv,
       probeTimeoutMs: 5,
       pollMs: 1,
       startupTimeoutMs: 10,
@@ -210,7 +214,7 @@ describe('ensureLocalAppReady', () => {
 
   it('stops the spawned local app when auto-start times out', async () => {
     const child = {
-      exitCode: null,
+      exitCode: null as number | null,
       unrefCalls: 0,
       killCalls: 0,
       unref() {
@@ -228,10 +232,10 @@ describe('ensureLocalAppReady', () => {
         baseUrl: 'http://localhost:3000',
         fetchImpl: (async () => {
           throw new TypeError('Unable to connect. Is the computer able to access the url?');
-        }) as typeof fetch,
-        spawnImpl: (() => child) as unknown as typeof import('node:child_process').spawn,
+        }) as unknown as FetchImpl,
+        spawnImpl: (() => child) as unknown as SpawnImpl,
         execPath: '/fake/bun',
-        env: {},
+        env: {} as NodeJS.ProcessEnv,
         probeTimeoutMs: 5,
         pollMs: 1,
         startupTimeoutMs: 2,
