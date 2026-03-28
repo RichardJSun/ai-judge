@@ -15,6 +15,7 @@ import {
   TableCell,
   TableHead,
   TableRow,
+  TableContainer,
   Tooltip,
   Typography,
 } from '@mui/material';
@@ -35,6 +36,10 @@ import PromptFieldSelector from './PromptFieldSelector';
 
 interface AssignmentMatrixProps {
   queueId: string;
+}
+
+function getAssignmentQuestionsQueryKey(queueId: string) {
+  return ['assignment-questions', queueId] as const;
 }
 
 const PROMPT_FIELD_LABELS: Record<string, string> = {
@@ -163,7 +168,7 @@ export default function AssignmentMatrix({ queueId }: AssignmentMatrixProps) {
     error: questionsError,
     refetch: refetchQuestions,
   } = useQuery<QueueQuestionWithAssignments[], Error>({
-    queryKey: ['questions', queueId],
+    queryKey: getAssignmentQuestionsQueryKey(queueId),
     queryFn: () => fetchQuestions(queueId),
   });
 
@@ -214,7 +219,7 @@ export default function AssignmentMatrix({ queueId }: AssignmentMatrixProps) {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['assignments', queueId] });
-      qc.invalidateQueries({ queryKey: ['questions', queueId] });
+      qc.invalidateQueries({ queryKey: getAssignmentQuestionsQueryKey(queueId) });
       qc.invalidateQueries({ queryKey: ['run-preview', queueId] });
     },
   });
@@ -302,33 +307,37 @@ export default function AssignmentMatrix({ queueId }: AssignmentMatrixProps) {
       ) : null}
 
       <Paper>
-        <Table>
-          <TableHead>
-            <TableRow>
-              <TableCell sx={{ minWidth: 240 }}>Question</TableCell>
-              {visibleJudges.map((judge) => (
-                <TableCell key={judge.id} align="center" sx={{ minWidth: 140 }}>
-                  <Tooltip
-                    title={
-                      judge.active
-                        ? judge.model
-                        : `${judge.model} — inactive judges remain visible while persisted assignments exist.`
-                    }
-                  >
-                    <Stack spacing={0.5} alignItems="center">
-                      <Typography fontSize={13} fontWeight={500}>
-                        {judge.name}
-                      </Typography>
-                      {!judge.active ? <Chip size="small" label="Inactive" /> : null}
-                    </Stack>
-                  </Tooltip>
-                </TableCell>
-              ))}
-            </TableRow>
-          </TableHead>
-          <TableBody>
+        <TableContainer sx={{ overflowX: 'auto' }}>
+          <Table sx={{ minWidth: 240 + visibleJudges.length * 160 }}>
+            <TableHead>
+              <TableRow>
+                <TableCell sx={{ minWidth: 240 }}>Question</TableCell>
+                {visibleJudges.map((judge) => (
+                  <TableCell key={judge.id} align="center" sx={{ minWidth: 140 }}>
+                    <Tooltip
+                      title={
+                        judge.active
+                          ? judge.model
+                          : `${judge.model} — inactive judges remain visible while persisted assignments exist.`
+                      }
+                    >
+                      <Stack spacing={0.5} alignItems="center">
+                        <Typography fontSize={13} fontWeight={500}>
+                          {judge.name}
+                        </Typography>
+                        {!judge.active ? <Chip size="small" label="Inactive" /> : null}
+                      </Stack>
+                    </Tooltip>
+                  </TableCell>
+                ))}
+              </TableRow>
+            </TableHead>
+            <TableBody>
             {(questions ?? []).map((question) => {
-              const inactiveQuestionAssignments = question.assignments.filter(
+              const questionAssignments = Array.isArray(question.assignments)
+                ? question.assignments
+                : [];
+              const inactiveQuestionAssignments = questionAssignments.filter(
                 (assignment) => assignment.judge_status === 'inactive'
               );
 
@@ -345,7 +354,7 @@ export default function AssignmentMatrix({ queueId }: AssignmentMatrixProps) {
                         {question.external_id}
                       </Typography>
                       <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap mt={1}>
-                        <Chip size="small" label={`${question.assignments.length} persisted`} />
+                        <Chip size="small" label={`${questionAssignments.length} persisted`} />
                         {inactiveQuestionAssignments.length > 0 ? (
                           <Chip
                             size="small"
@@ -406,9 +415,9 @@ export default function AssignmentMatrix({ queueId }: AssignmentMatrixProps) {
                               <Typography variant="caption" color="text.secondary" display="block" mb={1}>
                                 Persisted assignments for this question:
                               </Typography>
-                              {question.assignments.length > 0 ? (
+                              {questionAssignments.length > 0 ? (
                                 <Stack spacing={1}>
-                                  {question.assignments.map((assignment) => (
+                                  {questionAssignments.map((assignment) => (
                                     <Paper key={`${assignment.question_template_id}::${assignment.judge_id}`} variant="outlined" sx={{ p: 1.5 }}>
                                       <Stack
                                         direction={{ xs: 'column', sm: 'row' }}
@@ -467,8 +476,9 @@ export default function AssignmentMatrix({ queueId }: AssignmentMatrixProps) {
                 </Fragment>
               );
             })}
-          </TableBody>
-        </Table>
+            </TableBody>
+          </Table>
+        </TableContainer>
       </Paper>
     </Stack>
   );

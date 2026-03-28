@@ -42,6 +42,10 @@ function fetchQuestions(queueId: string) {
   });
 }
 
+function getResultsQuestionsQueryKey(queueId: string) {
+  return ['results-filter-questions', queueId] as const;
+}
+
 function fetchResults(queueId: string, filterQueryString: string) {
   return fetchJson(`/api/queues/${queueId}/results?${filterQueryString}`, {
     fallbackMessage: 'Failed to load queue results.',
@@ -110,7 +114,7 @@ export default function ResultsPage({ params }: { params: Promise<{ queueId: str
     error: questionsError,
     refetch: refetchQuestions,
   } = useQuery<ResultsFilterQuestion[], Error>({
-    queryKey: ['questions', queueId],
+    queryKey: getResultsQuestionsQueryKey(queueId),
     queryFn: () => fetchQuestions(queueId),
   });
 
