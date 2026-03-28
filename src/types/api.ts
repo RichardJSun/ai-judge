@@ -1,5 +1,7 @@
 import type { Evaluation, EvaluationRun, Judge, JudgeAssignment, Queue, QuestionTemplate, Submission, VerdictEnum } from './db';
 
+export type SubmissionDetailAnswer = string | number | boolean | null | Array<string | number | boolean>;
+
 export interface UploadResult {
   queues: number;
   submissions: number;
@@ -96,4 +98,28 @@ export interface ResultsFilter {
   questionId?: string[];
   verdict?: VerdictEnum[];
   page?: number;
+}
+
+export interface SubmissionDetailSummary {
+  totalQuestions: number;
+  answeredQuestions: number;
+  missingQuestions: number;
+}
+
+export interface SubmissionDetailQuestion {
+  id: QuestionTemplate['id'];
+  external_id: QuestionTemplate['external_id'];
+  question_type: QuestionTemplate['question_type'];
+  question_text: QuestionTemplate['question_text'];
+  created_at: QuestionTemplate['created_at'];
+  answerState: 'answered' | 'missing';
+  answer: SubmissionDetailAnswer;
+  rawAnswer: Record<string, unknown> | null;
+}
+
+export interface SubmissionDetailResponse {
+  queue: Pick<Queue, 'id' | 'queue_id' | 'created_at'>;
+  submission: Pick<Submission, 'id' | 'queue_id' | 'external_id' | 'labeling_task_id' | 'submitted_at' | 'created_at'>;
+  summary: SubmissionDetailSummary;
+  questions: SubmissionDetailQuestion[];
 }
