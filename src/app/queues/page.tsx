@@ -19,6 +19,7 @@ import {
 } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
+import ReviewerTableSurface from '@/components/layout/ReviewerTableSurface';
 import type { QueueWithCounts } from '@/types/api';
 
 export default function QueuesPage() {
@@ -47,22 +48,30 @@ export default function QueuesPage() {
           </Button>
         </Paper>
       ) : (
-        <Paper>
-          <Table>
+        <ReviewerTableSurface>
+          <Table sx={{ minWidth: 940 }}>
             <TableHead>
               <TableRow>
-                <TableCell>Queue ID</TableCell>
-                <TableCell align="center">Submissions</TableCell>
-                <TableCell align="center">Questions</TableCell>
-                <TableCell>Created</TableCell>
-                <TableCell align="right">Actions</TableCell>
+                <TableCell sx={{ minWidth: 280 }}>Queue ID</TableCell>
+                <TableCell align="center" sx={{ minWidth: 110 }}>
+                  Submissions
+                </TableCell>
+                <TableCell align="center" sx={{ minWidth: 110 }}>
+                  Questions
+                </TableCell>
+                <TableCell sx={{ minWidth: 180, whiteSpace: 'nowrap' }}>Created</TableCell>
+                <TableCell align="right" sx={{ minWidth: 280, whiteSpace: 'nowrap' }}>
+                  Actions
+                </TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {queues.map((q) => (
                 <TableRow key={q.id} hover>
                   <TableCell>
-                    <Typography fontWeight={500}>{q.queue_id}</Typography>
+                    <Typography fontFamily="monospace" fontSize={13} sx={{ whiteSpace: 'nowrap' }}>
+                      {q.queue_id}
+                    </Typography>
                   </TableCell>
                   <TableCell align="center">
                     <Chip label={q.submission_count} size="small" />
@@ -70,25 +79,13 @@ export default function QueuesPage() {
                   <TableCell align="center">
                     <Chip label={q.question_count} size="small" />
                   </TableCell>
-                  <TableCell>
-                    {new Date(q.created_at).toLocaleDateString()}
-                  </TableCell>
-                  <TableCell align="right">
+                  <TableCell sx={{ whiteSpace: 'nowrap' }}>{new Date(q.created_at).toLocaleDateString()}</TableCell>
+                  <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
                     <Stack direction="row" spacing={1} justifyContent="flex-end">
-                      <Button
-                        component={Link}
-                        href={`/queues/${q.id}`}
-                        size="small"
-                        startIcon={<VisibilityIcon />}
-                      >
+                      <Button component={Link} href={`/queues/${q.id}`} size="small" startIcon={<VisibilityIcon />}>
                         View
                       </Button>
-                      <Button
-                        component={Link}
-                        href={`/queues/${q.id}/assign`}
-                        size="small"
-                        startIcon={<AssignmentIcon />}
-                      >
+                      <Button component={Link} href={`/queues/${q.id}/assign`} size="small" startIcon={<AssignmentIcon />}>
                         Assign
                       </Button>
                       <Button
@@ -106,7 +103,7 @@ export default function QueuesPage() {
               ))}
             </TableBody>
           </Table>
-        </Paper>
+        </ReviewerTableSurface>
       )}
     </>
   );

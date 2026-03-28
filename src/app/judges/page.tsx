@@ -124,10 +124,6 @@ export default function JudgesPage() {
         <Chip color="default" label={`${counts.inactive} inactive`} />
       </Stack>
 
-      <Alert severity="info">
-        The /judges list is the reviewer-facing lifecycle surface. A judge disappearing from this page is now a bug, not a normal deactivate path.
-      </Alert>
-
       {isLoading ? (
         <Box display="flex" justifyContent="center" mt={6}>
           <CircularProgress />
