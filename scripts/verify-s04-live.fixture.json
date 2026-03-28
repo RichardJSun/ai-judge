@@ -1,0 +1,110 @@
+[
+  {
+    "id": "sub_s04_1",
+    "queueId": "queue_s04_live_proof",
+    "labelingTaskId": "task_s04_live_proof",
+    "createdAt": 1711666800000,
+    "questions": [
+      {
+        "rev": 1,
+        "data": {
+          "id": "q_template_s04_live_1",
+          "questionType": "single_choice_with_reasoning",
+          "questionText": "Does the answer follow the rubric?"
+        }
+      },
+      {
+        "rev": 1,
+        "data": {
+          "id": "q_template_s04_live_2",
+          "questionType": "free_text",
+          "questionText": "Is the final recommendation supported by cited evidence?"
+        }
+      }
+    ],
+    "answers": {
+      "q_template_s04_live_1": {
+        "verdictHint": "pass",
+        "evidence": "Every required rubric point is addressed.",
+        "notes": "No missing sections were found."
+      },
+      "q_template_s04_live_2": {
+        "verdictHint": "fail",
+        "evidence": "The recommendation ignores the strongest contradictory fact.",
+        "notes": "The conclusion overstates certainty."
+      }
+    }
+  },
+  {
+    "id": "sub_s04_2",
+    "queueId": "queue_s04_live_proof",
+    "labelingTaskId": "task_s04_live_proof",
+    "createdAt": 1711666860000,
+    "questions": [
+      {
+        "rev": 1,
+        "data": {
+          "id": "q_template_s04_live_1",
+          "questionType": "single_choice_with_reasoning",
+          "questionText": "Does the answer follow the rubric?"
+        }
+      },
+      {
+        "rev": 1,
+        "data": {
+          "id": "q_template_s04_live_2",
+          "questionType": "free_text",
+          "questionText": "Is the final recommendation supported by cited evidence?"
+        }
+      }
+    ],
+    "answers": {
+      "q_template_s04_live_1": {
+        "verdictHint": "fail",
+        "evidence": "One required rubric checkpoint is omitted entirely.",
+        "notes": "The answer skips the justification step."
+      },
+      "q_template_s04_live_2": {
+        "verdictHint": "pass",
+        "evidence": "The recommendation matches the cited findings section.",
+        "notes": "The evidence and conclusion are consistent."
+      }
+    }
+  },
+  {
+    "id": "sub_s04_3",
+    "queueId": "queue_s04_live_proof",
+    "labelingTaskId": "task_s04_live_proof",
+    "createdAt": 1711666920000,
+    "questions": [
+      {
+        "rev": 1,
+        "data": {
+          "id": "q_template_s04_live_1",
+          "questionType": "single_choice_with_reasoning",
+          "questionText": "Does the answer follow the rubric?"
+        }
+      },
+      {
+        "rev": 1,
+        "data": {
+          "id": "q_template_s04_live_2",
+          "questionType": "free_text",
+          "questionText": "Is the final recommendation supported by cited evidence?"
+        }
+      }
+    ],
+    "answers": {
+      "q_template_s04_live_1": {
+        "verdictHint": "pass",
+        "evidence": "The answer covers the rubric and cites each criterion explicitly.",
+        "notes": "The structure is complete and easy to verify."
+      },
+      "q_template_s04_live_2": {
+        "verdictHint": "inconclusive",
+        "evidence": "The final recommendation references the evidence but leaves one key gap unresolved.",
+        "notes": "More support is needed before confirming the claim."
+      }
+    }
+  }
+]
