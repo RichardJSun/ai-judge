@@ -4,7 +4,6 @@ import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import GavelIcon from '@mui/icons-material/Gavel';
 import ListAltIcon from '@mui/icons-material/ListAlt';
 import {
-  Box,
   Divider,
   Drawer,
   List,
@@ -17,8 +16,7 @@ import {
 } from '@mui/material';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-
-const DRAWER_WIDTH = 220;
+import { navSidebarDrawerSx } from './shell-layout';
 
 const navItems = [
   { label: 'Upload', href: '/upload', icon: <CloudUploadIcon /> },
@@ -30,19 +28,7 @@ export default function NavSidebar() {
   const pathname = usePathname();
 
   return (
-    <Drawer
-      variant="permanent"
-      sx={{
-        width: DRAWER_WIDTH,
-        flexShrink: 0,
-        '& .MuiDrawer-paper': {
-          width: DRAWER_WIDTH,
-          boxSizing: 'border-box',
-          borderRight: '1px solid',
-          borderColor: 'divider',
-        },
-      }}
-    >
+    <Drawer variant="permanent" sx={navSidebarDrawerSx}>
       <Toolbar>
         <Typography variant="h6" fontWeight={700} color="primary">
           AI Judge
@@ -72,5 +58,3 @@ export default function NavSidebar() {
     </Drawer>
   );
 }
-
-export { DRAWER_WIDTH };

@@ -1,22 +1,14 @@
 'use client';
 
-import { Box, Toolbar } from '@mui/material';
-import NavSidebar, { DRAWER_WIDTH } from './NavSidebar';
+import { Box } from '@mui/material';
+import NavSidebar from './NavSidebar';
+import { appShellMainSx, appShellRootSx } from './shell-layout';
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   return (
-    <Box sx={{ display: 'flex', minHeight: '100vh' }}>
+    <Box sx={appShellRootSx}>
       <NavSidebar />
-      <Box
-        component="main"
-        sx={{
-          flexGrow: 1,
-          ml: `${DRAWER_WIDTH}px`,
-          p: 3,
-          minHeight: '100vh',
-          bgcolor: 'background.default',
-        }}
-      >
+      <Box component="main" sx={appShellMainSx}>
         {children}
       </Box>
     </Box>
