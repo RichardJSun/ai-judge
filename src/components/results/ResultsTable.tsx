@@ -1,7 +1,10 @@
 'use client';
 
+import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
+import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 import {
   Box,
+  Chip,
   Collapse,
   IconButton,
   Paper,
@@ -14,14 +17,13 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material';
-import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
-import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 import { useState } from 'react';
+import type { EvalStatusEnum, VerdictEnum } from '@/types/db';
 import VerdictChip from './VerdictChip';
 
 interface EvalRow {
   id: string;
-  verdict: 'pass' | 'fail' | 'inconclusive' | null;
+  verdict: VerdictEnum | null;
   reasoning: string | null;
   model_used: string | null;
   tokens_used: number | null;
@@ -29,7 +31,7 @@ interface EvalRow {
   retry_count: number;
   error_message: string | null;
   created_at: string;
-  status: string;
+  status: EvalStatusEnum | string | null;
   submissions: { id: string; external_id: string };
   question_templates: { id: string; external_id: string; question_text: string };
   judges: { id: string; name: string; model: string };
@@ -37,6 +39,14 @@ interface EvalRow {
 
 interface ResultsTableProps {
   evaluations: EvalRow[];
+}
+
+function getRetryChipColor(status: EvalStatusEnum | string | null) {
+  return status === 'error' ? 'error' : 'warning';
+}
+
+function getRetryLabel(retryCount: number) {
+  return retryCount === 1 ? '1 retry' : `${retryCount} retries`;
 }
 
 function ExpandableRow({ ev }: { ev: EvalRow }) {
@@ -66,7 +76,17 @@ function ExpandableRow({ ev }: { ev: EvalRow }) {
           <Typography fontSize={13}>{ev.judges?.name ?? '—'}</Typography>
         </TableCell>
         <TableCell>
-          <VerdictChip verdict={ev.verdict} />
+          <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
+            <VerdictChip verdict={ev.verdict} status={ev.status as EvalStatusEnum | null | undefined} />
+            {ev.retry_count > 0 && (
+              <Chip
+                label={getRetryLabel(ev.retry_count)}
+                size="small"
+                variant="outlined"
+                color={getRetryChipColor(ev.status)}
+              />
+            )}
+          </Stack>
         </TableCell>
         <TableCell>
           <Typography fontSize={12} color="text.secondary">
@@ -84,6 +104,20 @@ function ExpandableRow({ ev }: { ev: EvalRow }) {
           <Collapse in={open}>
             <Box sx={{ p: 2, bgcolor: 'action.hover' }}>
               <Stack spacing={1}>
+                <Box>
+                  <Typography variant="caption" color="text.secondary">State</Typography>
+                  <Stack direction="row" spacing={1} mt={0.5} useFlexGap flexWrap="wrap">
+                    <VerdictChip verdict={ev.verdict} status={ev.status as EvalStatusEnum | null | undefined} />
+                    {ev.retry_count > 0 && (
+                      <Chip
+                        label={getRetryLabel(ev.retry_count)}
+                        size="small"
+                        variant="outlined"
+                        color={getRetryChipColor(ev.status)}
+                      />
+                    )}
+                  </Stack>
+                </Box>
                 {ev.reasoning && (
                   <Box>
                     <Typography variant="caption" color="text.secondary">Reasoning</Typography>
@@ -96,7 +130,7 @@ function ExpandableRow({ ev }: { ev: EvalRow }) {
                     <Typography variant="body2" color="error">{ev.error_message}</Typography>
                   </Box>
                 )}
-                <Stack direction="row" spacing={3}>
+                <Stack direction="row" spacing={3} useFlexGap flexWrap="wrap">
                   {ev.model_used && (
                     <Box>
                       <Typography variant="caption" color="text.secondary">Model</Typography>
@@ -109,10 +143,10 @@ function ExpandableRow({ ev }: { ev: EvalRow }) {
                       <Typography variant="body2">{ev.tokens_used}</Typography>
                     </Box>
                   )}
-                  {ev.retry_count > 0 && (
+                  {ev.latency_ms != null && (
                     <Box>
-                      <Typography variant="caption" color="text.secondary">Retries</Typography>
-                      <Typography variant="body2">{ev.retry_count}</Typography>
+                      <Typography variant="caption" color="text.secondary">Latency</Typography>
+                      <Typography variant="body2">{ev.latency_ms}ms</Typography>
                     </Box>
                   )}
                 </Stack>
@@ -143,7 +177,7 @@ export default function ResultsTable({ evaluations }: ResultsTableProps) {
             <TableCell>Submission</TableCell>
             <TableCell>Question</TableCell>
             <TableCell>Judge</TableCell>
-            <TableCell>Verdict</TableCell>
+            <TableCell>Outcome</TableCell>
             <TableCell>Latency</TableCell>
             <TableCell>Date</TableCell>
           </TableRow>
