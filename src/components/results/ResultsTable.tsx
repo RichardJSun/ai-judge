@@ -12,7 +12,6 @@ import {
   Table,
   TableBody,
   TableCell,
-  TableContainer,
   TableHead,
   TableRow,
   Tooltip,
@@ -20,6 +19,7 @@ import {
 } from '@mui/material';
 import { useState } from 'react';
 import type { ResultsEvaluation } from '@/types/api';
+import ReviewerTableSurface from '@/components/layout/ReviewerTableSurface';
 import VerdictChip from './VerdictChip';
 
 export interface ResultsTableProps {
@@ -201,7 +201,7 @@ export default function ResultsTable({ evaluations }: ResultsTableProps) {
   }
 
   return (
-    <TableContainer component={Paper}>
+    <ReviewerTableSurface>
       <Table size="small" sx={{ minWidth: 980 }}>
         <TableHead>
           <TableRow>
@@ -220,6 +220,6 @@ export default function ResultsTable({ evaluations }: ResultsTableProps) {
           ))}
         </TableBody>
       </Table>
-    </TableContainer>
+    </ReviewerTableSurface>
   );
 }
