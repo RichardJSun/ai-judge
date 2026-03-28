@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "verify:m002-s01": "bun run scripts/verify-m002-s01-shell.ts",
+    "verify:m002-s02": "bun run scripts/verify-m002-s02.ts",
     "verify:s01-live": "bun run scripts/verify-s01-live.ts",
     "verify:s02-live": "bun run scripts/verify-s02-live.ts",
     "verify:s03-live": "bun run scripts/verify-s03-live.ts",
@@ -29,6 +30,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@types/bun": "^1.3.11",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
