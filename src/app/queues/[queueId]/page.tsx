@@ -29,14 +29,18 @@ interface Submission {
   created_at: string;
 }
 
-export default function QueuePage({ params }: { params: Promise<{ queueId: string }> }) {
-  const { queueId } = use(params);
+export interface QueueSubmissionsResponse {
+  submissions: Submission[];
+  total: number;
+}
 
-  const { data, isLoading } = useQuery<{ submissions: Submission[]; total: number }>({
-    queryKey: ['queue-submissions', queueId],
-    queryFn: () => fetch(`/api/queues/${queueId}/submissions`).then((r) => r.json()),
-  });
+export interface QueuePageContentProps {
+  queueId: string;
+  data?: QueueSubmissionsResponse;
+  isLoading: boolean;
+}
 
+export function QueuePageContent({ queueId, data, isLoading }: QueuePageContentProps) {
   return (
     <>
       <Stack direction="row" alignItems="center" justifyContent="space-between" mb={3}>
@@ -84,16 +88,27 @@ export default function QueuePage({ params }: { params: Promise<{ queueId: strin
                 </TableRow>
               </TableHead>
               <TableBody>
-                {data.submissions.map((s) => (
-                  <TableRow key={s.id} hover>
+                {data.submissions.map((submission) => (
+                  <TableRow key={submission.id} hover>
                     <TableCell>
-                      <Typography fontFamily="monospace" fontSize={13} sx={{ whiteSpace: 'nowrap' }}>
-                        {s.external_id}
-                      </Typography>
+                      <Link
+                        href={`/queues/${queueId}/submissions/${submission.id}`}
+                        prefetch={false}
+                        aria-label={`Open submission ${submission.external_id}`}
+                        style={{ color: 'inherit', display: 'inline-block', textDecoration: 'none' }}
+                      >
+                        <Typography
+                          fontFamily="monospace"
+                          fontSize={13}
+                          sx={{ textDecoration: 'underline', textDecorationColor: 'divider', whiteSpace: 'nowrap' }}
+                        >
+                          {submission.external_id}
+                        </Typography>
+                      </Link>
                     </TableCell>
-                    <TableCell sx={{ whiteSpace: 'nowrap' }}>{s.labeling_task_id ?? '—'}</TableCell>
+                    <TableCell sx={{ whiteSpace: 'nowrap' }}>{submission.labeling_task_id ?? '—'}</TableCell>
                     <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                      {s.submitted_at ? new Date(s.submitted_at).toLocaleString() : '—'}
+                      {submission.submitted_at ? new Date(submission.submitted_at).toLocaleString() : '—'}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -104,4 +119,15 @@ export default function QueuePage({ params }: { params: Promise<{ queueId: strin
       )}
     </>
   );
+}
+
+export default function QueuePage({ params }: { params: Promise<{ queueId: string }> }) {
+  const { queueId } = use(params);
+
+  const { data, isLoading } = useQuery<QueueSubmissionsResponse>({
+    queryKey: ['queue-submissions', queueId],
+    queryFn: () => fetch(`/api/queues/${queueId}/submissions`).then((r) => r.json()),
+  });
+
+  return <QueuePageContent queueId={queueId} data={data} isLoading={isLoading} />;
 }
