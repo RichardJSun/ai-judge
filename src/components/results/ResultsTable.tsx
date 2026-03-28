@@ -12,150 +12,176 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableContainer,
   TableHead,
   TableRow,
   Tooltip,
   Typography,
 } from '@mui/material';
 import { useState } from 'react';
-import type { EvalStatusEnum, VerdictEnum } from '@/types/db';
+import type { ResultsEvaluation } from '@/types/api';
 import VerdictChip from './VerdictChip';
 
-interface EvalRow {
-  id: string;
-  verdict: VerdictEnum | null;
-  reasoning: string | null;
-  model_used: string | null;
-  tokens_used: number | null;
-  latency_ms: number | null;
-  retry_count: number;
-  error_message: string | null;
-  created_at: string;
-  status: EvalStatusEnum | string | null;
-  submission?: { id: string; external_id: string };
-  question?: { id: string; external_id: string; question_text: string };
-  judge?: { id: string; name: string; model: string };
-  submissions?: { id: string; external_id: string };
-  question_templates?: { id: string; external_id: string; question_text: string };
-  judges?: { id: string; name: string; model: string };
+export interface ResultsTableProps {
+  evaluations: ResultsEvaluation[];
 }
 
-interface ResultsTableProps {
-  evaluations: EvalRow[];
+const CREATED_AT_FORMATTER = new Intl.DateTimeFormat('en-US', {
+  month: 'short',
+  day: 'numeric',
+  year: 'numeric',
+  hour: 'numeric',
+  minute: '2-digit',
+  timeZone: 'UTC',
+  timeZoneName: 'short',
+});
+
+export function formatCreatedAt(createdAt: string) {
+  const value = new Date(createdAt);
+  return Number.isNaN(value.getTime()) ? createdAt : CREATED_AT_FORMATTER.format(value);
 }
 
-function getRetryChipColor(status: EvalStatusEnum | string | null) {
-  return status === 'error' ? 'error' : 'warning';
+export function summarizeReasoning(reasoning: string | null, maxLength = 160) {
+  if (!reasoning) {
+    return '—';
+  }
+
+  const normalized = reasoning.replace(/\s+/g, ' ').trim();
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+
+  return `${normalized.slice(0, maxLength - 1).trimEnd()}…`;
 }
 
-function getRetryLabel(retryCount: number) {
+function formatRetryCount(retryCount: number) {
+  if (retryCount === 0) {
+    return 'No retries';
+  }
+
   return retryCount === 1 ? '1 retry' : `${retryCount} retries`;
 }
 
-function ExpandableRow({ ev }: { ev: EvalRow }) {
+function AuditField({
+  label,
+  value,
+  monospace = false,
+}: {
+  label: string;
+  value: string | number;
+  monospace?: boolean;
+}) {
+  return (
+    <Box>
+      <Typography variant="caption" color="text.secondary" display="block">
+        {label}
+      </Typography>
+      <Typography variant="body2" fontFamily={monospace ? 'monospace' : undefined}>
+        {value}
+      </Typography>
+    </Box>
+  );
+}
+
+function ExpandableRow({ evaluation }: { evaluation: ResultsEvaluation }) {
   const [open, setOpen] = useState(false);
-  const submission = ev.submission ?? ev.submissions;
-  const question = ev.question ?? ev.question_templates;
-  const judge = ev.judge ?? ev.judges;
+  const reasoningSummary = summarizeReasoning(evaluation.reasoning);
+  const hasFullReasoning = Boolean(evaluation.reasoning && evaluation.reasoning.trim().length > 0);
 
   return (
     <>
       <TableRow hover>
-        <TableCell>
-          <IconButton size="small" onClick={() => setOpen(!open)}>
+        <TableCell sx={{ verticalAlign: 'top' }}>
+          <IconButton
+            aria-label={open ? 'Collapse audit details' : 'Expand audit details'}
+            size="small"
+            onClick={() => setOpen((current) => !current)}
+          >
             {open ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />}
           </IconButton>
         </TableCell>
-        <TableCell>
+        <TableCell sx={{ verticalAlign: 'top' }}>
           <Typography fontFamily="monospace" fontSize={12}>
-            {submission?.external_id ?? '—'}
+            {evaluation.submission.external_id}
           </Typography>
         </TableCell>
-        <TableCell>
-          <Tooltip title={question?.question_text ?? ''}>
-            <Typography fontSize={13} noWrap sx={{ maxWidth: 180 }}>
-              {question?.question_text ?? '—'}
+        <TableCell sx={{ verticalAlign: 'top', minWidth: 220 }}>
+          <Stack spacing={0.5}>
+            <Typography fontFamily="monospace" fontSize={12} color="text.secondary">
+              {evaluation.question.external_id}
+            </Typography>
+            <Typography fontSize={13}>{evaluation.question.question_text}</Typography>
+          </Stack>
+        </TableCell>
+        <TableCell sx={{ verticalAlign: 'top', minWidth: 180 }}>
+          <Typography fontSize={13}>{evaluation.judge.name}</Typography>
+        </TableCell>
+        <TableCell sx={{ verticalAlign: 'top', minWidth: 120 }}>
+          <VerdictChip verdict={evaluation.verdict} status={evaluation.status} />
+        </TableCell>
+        <TableCell sx={{ verticalAlign: 'top', minWidth: 320, maxWidth: 420 }}>
+          <Tooltip title={hasFullReasoning ? evaluation.reasoning ?? '' : 'No reasoning returned.'}>
+            <Typography fontSize={13} color={evaluation.reasoning ? 'text.primary' : 'text.secondary'}>
+              {reasoningSummary}
             </Typography>
           </Tooltip>
         </TableCell>
-        <TableCell>
-          <Typography fontSize={13}>{judge?.name ?? '—'}</Typography>
-        </TableCell>
-        <TableCell>
-          <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
-            <VerdictChip verdict={ev.verdict} status={ev.status as EvalStatusEnum | null | undefined} />
-            {ev.retry_count > 0 && (
-              <Chip
-                label={getRetryLabel(ev.retry_count)}
-                size="small"
-                variant="outlined"
-                color={getRetryChipColor(ev.status)}
-              />
-            )}
-          </Stack>
-        </TableCell>
-        <TableCell>
+        <TableCell sx={{ verticalAlign: 'top', minWidth: 180 }}>
           <Typography fontSize={12} color="text.secondary">
-            {ev.latency_ms != null ? `${ev.latency_ms}ms` : '—'}
-          </Typography>
-        </TableCell>
-        <TableCell>
-          <Typography fontSize={12} color="text.secondary">
-            {new Date(ev.created_at).toLocaleDateString()}
+            {formatCreatedAt(evaluation.created_at)}
           </Typography>
         </TableCell>
       </TableRow>
       <TableRow>
         <TableCell colSpan={7} sx={{ p: 0, borderBottom: open ? undefined : 'none' }}>
           <Collapse in={open}>
-            <Box sx={{ p: 2, bgcolor: 'action.hover' }}>
-              <Stack spacing={1}>
+            <Box sx={{ p: 2.5, bgcolor: 'action.hover' }}>
+              <Stack spacing={2}>
                 <Box>
-                  <Typography variant="caption" color="text.secondary">State</Typography>
-                  <Stack direction="row" spacing={1} mt={0.5} useFlexGap flexWrap="wrap">
-                    <VerdictChip verdict={ev.verdict} status={ev.status as EvalStatusEnum | null | undefined} />
-                    {ev.retry_count > 0 && (
-                      <Chip
-                        label={getRetryLabel(ev.retry_count)}
-                        size="small"
-                        variant="outlined"
-                        color={getRetryChipColor(ev.status)}
-                      />
-                    )}
-                  </Stack>
+                  <Typography variant="caption" color="text.secondary" display="block" mb={0.5}>
+                    Full reasoning
+                  </Typography>
+                  <Typography variant="body2" color={evaluation.reasoning ? 'text.primary' : 'text.secondary'}>
+                    {evaluation.reasoning ?? 'No reasoning returned.'}
+                  </Typography>
                 </Box>
-                {ev.reasoning && (
-                  <Box>
-                    <Typography variant="caption" color="text.secondary">Reasoning</Typography>
-                    <Typography variant="body2">{ev.reasoning}</Typography>
-                  </Box>
-                )}
-                {ev.error_message && (
-                  <Box>
-                    <Typography variant="caption" color="error">Error</Typography>
-                    <Typography variant="body2" color="error">{ev.error_message}</Typography>
-                  </Box>
-                )}
-                <Stack direction="row" spacing={3} useFlexGap flexWrap="wrap">
-                  {ev.model_used && (
-                    <Box>
-                      <Typography variant="caption" color="text.secondary">Model</Typography>
-                      <Typography variant="body2" fontFamily="monospace" fontSize={12}>{ev.model_used}</Typography>
-                    </Box>
-                  )}
-                  {ev.tokens_used != null && (
-                    <Box>
-                      <Typography variant="caption" color="text.secondary">Tokens</Typography>
-                      <Typography variant="body2">{ev.tokens_used}</Typography>
-                    </Box>
-                  )}
-                  {ev.latency_ms != null && (
-                    <Box>
-                      <Typography variant="caption" color="text.secondary">Latency</Typography>
-                      <Typography variant="body2">{ev.latency_ms}ms</Typography>
-                    </Box>
-                  )}
+
+                <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
+                  <VerdictChip verdict={evaluation.verdict} status={evaluation.status} />
+                  {evaluation.retry_count > 0 ? (
+                    <Chip
+                      label={formatRetryCount(evaluation.retry_count)}
+                      size="small"
+                      variant="outlined"
+                      color={evaluation.status === 'error' ? 'error' : 'warning'}
+                    />
+                  ) : null}
                 </Stack>
+
+                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={3} useFlexGap flexWrap="wrap">
+                  <AuditField
+                    label="Model"
+                    value={evaluation.model_used ?? '—'}
+                    monospace={Boolean(evaluation.model_used)}
+                  />
+                  <AuditField label="Tokens" value={evaluation.tokens_used ?? '—'} />
+                  <AuditField
+                    label="Latency"
+                    value={evaluation.latency_ms != null ? `${evaluation.latency_ms}ms` : '—'}
+                  />
+                  <AuditField label="Retries" value={formatRetryCount(evaluation.retry_count)} />
+                </Stack>
+
+                {evaluation.error_message ? (
+                  <Box>
+                    <Typography variant="caption" color="error" display="block" mb={0.5}>
+                      Error text
+                    </Typography>
+                    <Typography variant="body2" color="error">
+                      {evaluation.error_message}
+                    </Typography>
+                  </Box>
+                ) : null}
               </Stack>
             </Box>
           </Collapse>
@@ -166,7 +192,7 @@ function ExpandableRow({ ev }: { ev: EvalRow }) {
 }
 
 export default function ResultsTable({ evaluations }: ResultsTableProps) {
-  if (!evaluations.length) {
+  if (evaluations.length === 0) {
     return (
       <Paper sx={{ p: 4, textAlign: 'center' }}>
         <Typography color="text.secondary">No evaluations match the current filters.</Typography>
@@ -175,25 +201,25 @@ export default function ResultsTable({ evaluations }: ResultsTableProps) {
   }
 
   return (
-    <Paper>
-      <Table size="small">
+    <TableContainer component={Paper}>
+      <Table size="small" sx={{ minWidth: 980 }}>
         <TableHead>
           <TableRow>
             <TableCell width={40} />
             <TableCell>Submission</TableCell>
             <TableCell>Question</TableCell>
             <TableCell>Judge</TableCell>
-            <TableCell>Outcome</TableCell>
-            <TableCell>Latency</TableCell>
-            <TableCell>Date</TableCell>
+            <TableCell>Verdict</TableCell>
+            <TableCell>Reasoning</TableCell>
+            <TableCell>Created</TableCell>
           </TableRow>
         </TableHead>
         <TableBody>
-          {evaluations.map((ev) => (
-            <ExpandableRow key={ev.id} ev={ev} />
+          {evaluations.map((evaluation) => (
+            <ExpandableRow key={evaluation.id} evaluation={evaluation} />
           ))}
         </TableBody>
       </Table>
-    </Paper>
+    </TableContainer>
   );
 }
