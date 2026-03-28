@@ -12,7 +12,8 @@
     "verify:s01-live": "bun run scripts/verify-s01-live.ts",
     "verify:s02-live": "bun run scripts/verify-s02-live.ts",
     "verify:s03-live": "bun run scripts/verify-s03-live.ts",
-    "verify:s04-live": "bun run scripts/verify-s04-live.ts"
+    "verify:s04-live": "bun run scripts/verify-s04-live.ts",
+    "verify:m004-s01": "bun run scripts/verify-m004-s01.ts"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",
