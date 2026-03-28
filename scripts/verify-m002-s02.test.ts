@@ -3,6 +3,7 @@ import { VerifierPhaseError as S04VerifierPhaseError } from './verify-s04-live';
 import {
   assertPageContract,
   buildProofTargets,
+  ensureLocalAppReady,
   formatProofTargets,
   formatSetupSummary,
   normalizeUpstreamError,
@@ -129,6 +130,116 @@ describe('parseVerifierOptions', () => {
       timeoutMs: 9000,
       pollMs: 750,
     });
+  });
+});
+
+describe('ensureLocalAppReady', () => {
+  it('does not spawn a local app when localhost is already reachable', async () => {
+    let spawnCalls = 0;
+
+    const guard = await ensureLocalAppReady({
+      baseUrl: 'http://localhost:3000',
+      fetchImpl: (async () => new Response('[]', { status: 200 })) as typeof fetch,
+      spawnImpl: (() => {
+        spawnCalls += 1;
+        throw new Error('spawn should not be called');
+      }) as unknown as typeof import('node:child_process').spawn,
+      probeTimeoutMs: 5,
+      pollMs: 1,
+      startupTimeoutMs: 10,
+    });
+
+    expect(guard.autoStarted).toBe(false);
+    expect(spawnCalls).toBe(0);
+  });
+
+  it('auto-starts bun run dev when localhost is unreachable', async () => {
+    const spawnCalls: Array<{ command: string; args: string[]; options: Record<string, unknown> }> = [];
+    const child = {
+      exitCode: null,
+      unrefCalls: 0,
+      killCalls: 0,
+      unref() {
+        this.unrefCalls += 1;
+      },
+      kill() {
+        this.killCalls += 1;
+        this.exitCode = 0;
+        return true;
+      },
+    };
+
+    let fetchCallCount = 0;
+    const guard = await ensureLocalAppReady({
+      baseUrl: 'http://localhost:3000',
+      fetchImpl: (async () => {
+        fetchCallCount += 1;
+        if (fetchCallCount === 1) {
+          throw new TypeError('Unable to connect. Is the computer able to access the url?');
+        }
+
+        return new Response('[]', { status: 200 });
+      }) as typeof fetch,
+      spawnImpl: ((command: string, args: string[], options: Record<string, unknown>) => {
+        spawnCalls.push({ command, args, options });
+        return child;
+      }) as unknown as typeof import('node:child_process').spawn,
+      execPath: '/fake/bun',
+      env: {},
+      probeTimeoutMs: 5,
+      pollMs: 1,
+      startupTimeoutMs: 10,
+    });
+
+    expect(guard.autoStarted).toBe(true);
+    expect(spawnCalls).toHaveLength(1);
+    expect(spawnCalls[0]).toEqual({
+      command: '/fake/bun',
+      args: ['run', 'dev', '--', '--hostname', 'localhost', '--port', '3000'],
+      options: expect.objectContaining({
+        cwd: process.cwd(),
+        detached: true,
+        stdio: 'ignore',
+      }),
+    });
+
+    guard.keepAlive();
+    expect(child.unrefCalls).toBe(1);
+    expect(child.killCalls).toBe(0);
+  });
+
+  it('stops the spawned local app when auto-start times out', async () => {
+    const child = {
+      exitCode: null,
+      unrefCalls: 0,
+      killCalls: 0,
+      unref() {
+        this.unrefCalls += 1;
+      },
+      kill() {
+        this.killCalls += 1;
+        this.exitCode = 0;
+        return true;
+      },
+    };
+
+    await expect(
+      ensureLocalAppReady({
+        baseUrl: 'http://localhost:3000',
+        fetchImpl: (async () => {
+          throw new TypeError('Unable to connect. Is the computer able to access the url?');
+        }) as typeof fetch,
+        spawnImpl: (() => child) as unknown as typeof import('node:child_process').spawn,
+        execPath: '/fake/bun',
+        env: {},
+        probeTimeoutMs: 5,
+        pollMs: 1,
+        startupTimeoutMs: 2,
+      })
+    ).rejects.toThrow('Local Next dev server did not become reachable at http://localhost:3000/api/queues within 2ms after auto-start.');
+
+    expect(child.killCalls).toBe(1);
+    expect(child.unrefCalls).toBe(1);
   });
 });
 

@@ -1,3 +1,4 @@
+import { spawn, type ChildProcess } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { parseArgs } from 'node:util';
 import {
@@ -9,6 +10,7 @@ import {
 
 type FetchLike = typeof fetch;
 type ReadFileLike = typeof readFile;
+type SpawnLike = typeof spawn;
 
 type PhaseName =
   | 'live-proof'
@@ -77,6 +79,17 @@ export type LiveVerificationSummary = {
 const DEFAULT_FIXTURE_PATH = 'scripts/verify-s04-live.fixture.json';
 const DEFAULT_TIMEOUT_MS = 120_000;
 const DEFAULT_POLL_MS = 2_000;
+const LOCAL_APP_PROBE_TIMEOUT_MS = 1_500;
+const LOCAL_APP_START_TIMEOUT_MS = 45_000;
+const LOCAL_APP_POLL_MS = 500;
+const CONNECTION_FAILURE_PATTERN =
+  /(Unable to connect|ECONNREFUSED|ECONNRESET|ENOTFOUND|EHOSTUNREACH|EAI_AGAIN|network error|Failed to fetch|fetch failed|Connection refused)/i;
+
+export type LocalAppGuard = {
+  autoStarted: boolean;
+  keepAlive: () => void;
+  stop: () => void;
+};
 
 export class VerifierPhaseError extends Error {
   readonly phase: PhaseName;
@@ -173,8 +186,155 @@ function buildTimeoutSignal(timeoutMs: number) {
   return controller.signal;
 }
 
+function wait(delayMs: number) {
+  return new Promise((resolve) => setTimeout(resolve, delayMs));
+}
+
+function isLocalBaseUrl(baseUrl: string) {
+  try {
+    const parsed = new URL(baseUrl);
+    return parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1';
+  } catch {
+    return false;
+  }
+}
+
+function collectErrorMessages(error: unknown) {
+  const messages: string[] = [];
+  let current: unknown = error;
+
+  for (let depth = 0; depth < 4 && current; depth += 1) {
+    if (!(current instanceof Error)) {
+      if (typeof current === 'string' && current.trim()) {
+        messages.push(current);
+      }
+      break;
+    }
+
+    if (current.message.trim()) {
+      messages.push(current.message);
+    }
+
+    current = 'cause' in current ? current.cause : null;
+  }
+
+  return messages;
+}
+
+function isConnectionError(error: unknown) {
+  return collectErrorMessages(error).some((message) => CONNECTION_FAILURE_PATTERN.test(message));
+}
+
 function isTimeoutError(error: unknown) {
   return error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError');
+}
+
+type Reachability = 'reachable' | 'unreachable' | 'timeout';
+
+async function probeReachability(fetchImpl: FetchLike, url: string, timeoutMs: number): Promise<Reachability> {
+  try {
+    const response = await fetchImpl(url, { signal: buildTimeoutSignal(timeoutMs) });
+    await response.body?.cancel?.();
+    return 'reachable';
+  } catch (error) {
+    if (isTimeoutError(error)) {
+      return 'timeout';
+    }
+
+    if (isConnectionError(error)) {
+      return 'unreachable';
+    }
+
+    throw error;
+  }
+}
+
+function createNoopLocalAppGuard(): LocalAppGuard {
+  return {
+    autoStarted: false,
+    keepAlive: () => {},
+    stop: () => {},
+  };
+}
+
+export async function ensureLocalAppReady({
+  baseUrl,
+  fetchImpl = fetch,
+  spawnImpl = spawn,
+  startupTimeoutMs = LOCAL_APP_START_TIMEOUT_MS,
+  probeTimeoutMs = LOCAL_APP_PROBE_TIMEOUT_MS,
+  pollMs = LOCAL_APP_POLL_MS,
+  cwd = process.cwd(),
+  execPath = process.execPath,
+  env = process.env,
+}: {
+  baseUrl: string;
+  fetchImpl?: FetchLike;
+  spawnImpl?: SpawnLike;
+  startupTimeoutMs?: number;
+  probeTimeoutMs?: number;
+  pollMs?: number;
+  cwd?: string;
+  execPath?: string;
+  env?: NodeJS.ProcessEnv;
+}): Promise<LocalAppGuard> {
+  if (!isLocalBaseUrl(baseUrl)) {
+    return createNoopLocalAppGuard();
+  }
+
+  const healthUrl = `${baseUrl.replace(/\/$/, '')}/api/queues`;
+  const initialReachability = await probeReachability(fetchImpl, healthUrl, probeTimeoutMs);
+
+  if (initialReachability !== 'unreachable') {
+    return createNoopLocalAppGuard();
+  }
+
+  const parsedBaseUrl = new URL(baseUrl);
+  const port = parsedBaseUrl.port || '3000';
+  const child = spawnImpl(execPath, ['run', 'dev', '--', '--hostname', parsedBaseUrl.hostname, '--port', port], {
+    cwd,
+    env,
+    stdio: 'ignore',
+    detached: true,
+  }) as ChildProcess;
+
+  let released = false;
+  const keepAlive = () => {
+    if (!released) {
+      child.unref();
+      released = true;
+    }
+  };
+  const stop = () => {
+    if (child.exitCode == null) {
+      child.kill('SIGTERM');
+    }
+    keepAlive();
+  };
+
+  try {
+    const deadline = Date.now() + startupTimeoutMs;
+
+    while (Date.now() < deadline) {
+      const reachability = await probeReachability(fetchImpl, healthUrl, probeTimeoutMs);
+      if (reachability === 'reachable') {
+        log(`Local app was unreachable; auto-started \`bun run dev\` at ${baseUrl}.`);
+        return {
+          autoStarted: true,
+          keepAlive,
+          stop,
+        };
+      }
+
+      await wait(pollMs);
+    }
+  } catch (error) {
+    stop();
+    throw error;
+  }
+
+  stop();
+  throw new Error(`Local Next dev server did not become reachable at ${healthUrl} within ${startupTimeoutMs}ms after auto-start.`);
 }
 
 async function readPageBody(fetchImpl: FetchLike, url: string, timeoutMs: number) {
@@ -358,49 +518,61 @@ export async function runLiveVerification(
   fetchImpl: FetchLike = fetch,
   readFileImpl: ReadFileLike = readFile
 ): Promise<LiveVerificationSummary> {
-  const upstreamSummary = await runWrappedS04Verification(options, fetchImpl, readFileImpl);
-  const proofTargets = buildProofTargets(upstreamSummary);
+  const localApp = await ensureLocalAppReady({ baseUrl: options.baseUrl, fetchImpl });
 
-  await verifyPage({
-    phase: 'assign-page',
-    page: `/queues/${upstreamSummary.queueId}/assign`,
-    url: proofTargets.assign,
-    expectedHeading: 'Assign Judges',
-    queueId: upstreamSummary.queueId,
-    queueLabel: upstreamSummary.queueLabel,
-    runId: upstreamSummary.run.runId,
-    validJudgeId: upstreamSummary.verifierJudgeIds.valid,
-    invalidJudgeId: upstreamSummary.verifierJudgeIds.invalid,
-    timeoutMs: options.timeoutMs,
-    fetchImpl,
-  });
+  try {
+    const upstreamSummary = await runWrappedS04Verification(options, fetchImpl, readFileImpl);
+    const proofTargets = buildProofTargets(upstreamSummary);
 
-  await verifyPage({
-    phase: 'results-page',
-    page: `/queues/${upstreamSummary.queueId}/results`,
-    url: proofTargets.results,
-    expectedHeading: 'Results',
-    queueId: upstreamSummary.queueId,
-    queueLabel: upstreamSummary.queueLabel,
-    runId: upstreamSummary.run.runId,
-    validJudgeId: upstreamSummary.verifierJudgeIds.valid,
-    invalidJudgeId: upstreamSummary.verifierJudgeIds.invalid,
-    timeoutMs: options.timeoutMs,
-    fetchImpl,
-  });
+    await verifyPage({
+      phase: 'assign-page',
+      page: `/queues/${upstreamSummary.queueId}/assign`,
+      url: proofTargets.assign,
+      expectedHeading: 'Assign Judges',
+      queueId: upstreamSummary.queueId,
+      queueLabel: upstreamSummary.queueLabel,
+      runId: upstreamSummary.run.runId,
+      validJudgeId: upstreamSummary.verifierJudgeIds.valid,
+      invalidJudgeId: upstreamSummary.verifierJudgeIds.invalid,
+      timeoutMs: options.timeoutMs,
+      fetchImpl,
+    });
 
-  log(
-    `Reviewer proof routes are reachable: assign=${proofTargets.assign} results=${proofTargets.results} resultsApi=${proofTargets.resultsApi}.`
-  );
+    await verifyPage({
+      phase: 'results-page',
+      page: `/queues/${upstreamSummary.queueId}/results`,
+      url: proofTargets.results,
+      expectedHeading: 'Results',
+      queueId: upstreamSummary.queueId,
+      queueLabel: upstreamSummary.queueLabel,
+      runId: upstreamSummary.run.runId,
+      validJudgeId: upstreamSummary.verifierJudgeIds.valid,
+      invalidJudgeId: upstreamSummary.verifierJudgeIds.invalid,
+      timeoutMs: options.timeoutMs,
+      fetchImpl,
+    });
 
-  return {
-    queueId: upstreamSummary.queueId,
-    queueLabel: upstreamSummary.queueLabel,
-    runId: upstreamSummary.run.runId,
-    verifierJudgeIds: upstreamSummary.verifierJudgeIds,
-    proofTargets,
-    upstreamSummary,
-  };
+    log(
+      `Reviewer proof routes are reachable: assign=${proofTargets.assign} results=${proofTargets.results} resultsApi=${proofTargets.resultsApi}.`
+    );
+
+    if (localApp.autoStarted) {
+      localApp.keepAlive();
+      log(`Local Next dev server remains available at ${options.baseUrl} for browser follow-up.`);
+    }
+
+    return {
+      queueId: upstreamSummary.queueId,
+      queueLabel: upstreamSummary.queueLabel,
+      runId: upstreamSummary.run.runId,
+      verifierJudgeIds: upstreamSummary.verifierJudgeIds,
+      proofTargets,
+      upstreamSummary,
+    };
+  } catch (error) {
+    localApp.stop();
+    throw error;
+  }
 }
 
 const isDirectRun = /(^|\/)verify-m002-s02\.ts$/.test(process.argv[1] ?? '');
