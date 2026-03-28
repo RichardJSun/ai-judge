@@ -10,11 +10,17 @@ import {
   Select,
   Stack,
 } from '@mui/material';
-import type { Judge, QuestionTemplate, VerdictEnum } from '@/types/db';
+import type { Judge, VerdictEnum } from '@/types/db';
+
+interface ResultsFilterQuestionOption {
+  id: string;
+  external_id: string | null;
+  question_text: string;
+}
 
 interface ResultsFiltersProps {
   judges: Judge[];
-  questions: QuestionTemplate[];
+  questions: ResultsFilterQuestionOption[];
   selectedJudges: string[];
   selectedQuestions: string[];
   selectedVerdicts: VerdictEnum[];
