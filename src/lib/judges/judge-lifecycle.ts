@@ -34,7 +34,7 @@ const reviewerDeleteRejection = {
 export function parseJudgeRecord(value: unknown, context = 'judge response'): Judge {
   const parsed = JudgeRecordSchema.safeParse(value);
   if (!parsed.success) {
-    throw new Error(`Malformed ${context}.`);
+    throw new Error(`Malformed ${context}: ${parsed.error.message}`);
   }
 
   return parsed.data;
@@ -43,7 +43,7 @@ export function parseJudgeRecord(value: unknown, context = 'judge response'): Ju
 export function parseJudgeList(value: unknown, context = 'judge list response'): Judge[] {
   const parsed = JudgeListSchema.safeParse(value);
   if (!parsed.success) {
-    throw new Error(`Malformed ${context}.`);
+    throw new Error(`Malformed ${context}: ${parsed.error.message}`);
   }
 
   return parsed.data;

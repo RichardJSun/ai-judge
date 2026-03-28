@@ -23,7 +23,7 @@ describe('fetchJson', () => {
             headers: { 'content-type': 'application/json' },
           }
         )
-    ) as typeof fetch;
+    ) as unknown as typeof fetch;
 
     await expect(
       fetchJson('/api/queues/queue-1/results', {
@@ -51,14 +51,14 @@ describe('fetchJson', () => {
             headers: { 'content-type': 'application/json' },
           }
         )
-    ) as typeof fetch;
+    ) as unknown as typeof fetch;
 
     await expect(
       fetchJson('/api/queues/queue-1/results', {
         fallbackMessage: 'Failed to load queue results.',
         parse: (value) => parseResultsResponse(value, '/api/queues/queue-1/results response'),
       })
-    ).rejects.toThrow('Malformed /api/queues/queue-1/results response.');
+    ).rejects.toThrow(/Malformed \/api\/queues\/queue-1\/results response: /);
   });
 
   it('surfaces invalid JSON responses with the fallback message context', async () => {
@@ -68,7 +68,7 @@ describe('fetchJson', () => {
           status: 200,
           headers: { 'content-type': 'application/json' },
         })
-    ) as typeof fetch;
+    ) as unknown as typeof fetch;
 
     await expect(
       fetchJson('/api/queues/queue-1/results', {
