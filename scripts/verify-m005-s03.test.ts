@@ -1,11 +1,16 @@
 import { describe, expect, it } from 'bun:test';
 import { parsePlanMarker } from '../src/lib/ai/plan-marker';
+import type { ResultsEvaluation } from '../src/types/api';
 import {
+  buildScenarioConfigs,
+  ensureGatewayEnvConfigured,
   formatVerifierSummary,
   parseVerifierOptions,
+  pollForScenarios,
   runPhase,
   VerifierPhaseError,
   type LiveVerificationSummary,
+  type ScenarioName,
   type ScenarioResult,
 } from './verify-m005-s03';
 
@@ -32,6 +37,41 @@ describe('parseVerifierOptions', () => {
       timeoutMs: 9000,
       pollMs: 500,
     });
+  });
+
+  it('rejects non-integer --timeout-ms overrides', () => {
+    expect(() =>
+      parseVerifierOptions([
+        '--base-url',
+        'http://localhost:3000',
+        '--timeout-ms',
+        'not-an-integer',
+      ])
+    ).toThrow('--timeout-ms must be a positive integer.');
+  });
+
+  it('rejects non-integer --poll-ms overrides', () => {
+    expect(() =>
+      parseVerifierOptions([
+        '--base-url',
+        'http://localhost:3000',
+        '--poll-ms',
+        '-5',
+      ])
+    ).toThrow('--poll-ms must be a positive integer.');
+  });
+});
+
+describe('readiness helpers', () => {
+  it('fails when AI_GATEWAY_API_KEY is missing', () => {
+    const originalKey = process.env.AI_GATEWAY_API_KEY;
+    delete process.env.AI_GATEWAY_API_KEY;
+    expect(() => ensureGatewayEnvConfigured()).toThrow('AI_GATEWAY_API_KEY');
+    if (originalKey !== undefined) {
+      process.env.AI_GATEWAY_API_KEY = originalKey;
+    } else {
+      delete process.env.AI_GATEWAY_API_KEY;
+    }
   });
 });
 
@@ -111,5 +151,68 @@ describe('formatVerifierSummary', () => {
     expect(formatVerifierSummary(summary)).toBe(
       'queue=queue-1 queueLabel=queue-proof run=run-1 question=question-1 questionExternalId=q-proof-1 submission=submission-1 submissionExternalId=sub-proof-1 evaluations=text-only=eval-text,multimodal=eval-multi,blocked=eval-blocked resultsUrl=http://localhost/queues/queue-proof/results'
     );
+  });
+});
+
+describe('pollForScenarios', () => {
+  it('throws when an evaluation is missing prompt_snapshot', async () => {
+    const options = {
+      baseUrl: 'http://localhost:3000',
+      fixturePath: 'scripts/verify-m005-s01.fixture.json',
+      timeoutMs: 1000,
+      pollMs: 10,
+    };
+
+    const scenarioConfigs = buildScenarioConfigs().filter((config) => config.name === 'text-only');
+    const scenarioMap = new Map<ScenarioName, { judgeId: string; judgeName: string }>([
+      ['text-only', { judgeId: 'judge-text', judgeName: 'Text Judge' }],
+    ]);
+
+    const evaluation: ResultsEvaluation = {
+      id: 'eval-text',
+      verdict: 'pass',
+      reasoning: 'ok',
+      prompt_snapshot: null,
+      model_used: 'verifier/m005-s03-text',
+      tokens_used: 0,
+      latency_ms: 0,
+      retry_count: 0,
+      error_message: null,
+      created_at: '2024-01-01T00:00:00.000Z',
+      status: 'completed',
+      submission: { id: 'submission-1', external_id: 'submission-ext-1' },
+      question: { id: 'question-1', external_id: 'question-ext-1', question_text: 'Sample' },
+      judge: { id: 'judge-text', name: 'Text Judge', model: 'verifier/m005-s03-text' },
+    };
+
+    const payload = {
+      evaluations: [evaluation],
+      total: 1,
+      passRate: 1,
+      judgePassRates: [],
+      page: 1,
+      pageSize: 25,
+    };
+
+    const fetchImpl = () =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve(payload),
+      } as Response);
+
+    await expect(
+      pollForScenarios(
+        options,
+        'queue-1',
+        'question-1',
+        'submission-ext-1',
+        scenarioMap,
+        scenarioConfigs,
+        2000,
+        fetchImpl,
+        { queueId: 'queue-1', runId: 'run-1', questionId: 'question-1', submissionExternalId: 'submission-ext-1' }
+      )
+    ).rejects.toThrow('prompt_snapshot');
   });
 });

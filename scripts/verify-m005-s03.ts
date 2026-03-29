@@ -4,6 +4,13 @@ import { loadFixture } from './verify-s02-live';
 import { selectProofSubmission } from './verify-m005-s01';
 import { DEFAULT_PROMPT_FIELDS } from '../src/lib/assignments/queue-assignment-state';
 import { parsePlanMarker } from '../src/lib/ai/plan-marker';
+import { SUBMISSION_ATTACHMENT_STORAGE_BUCKET } from '../src/lib/submissions/attachment-storage';
+import {
+  assertStorageBucketReady,
+  assertTableReadable,
+  createSupabaseServiceClient,
+  REQUIRED_TABLES,
+} from './verify-supabase';
 import type { EvalStatusEnum } from '../src/types/db';
 import type { ResultsResponse } from '../src/types/api';
 
@@ -50,6 +57,10 @@ type VerifierOptions = {
 };
 
 type PhaseName =
+  | 'env-readiness'
+  | 'schema-readiness'
+  | 'storage-readiness'
+  | 'model-readiness'
   | 'local-app'
   | 'fixture'
   | 'upload'
@@ -73,12 +84,22 @@ type PhaseRefs = {
   judgeId?: string;
   scenario?: ScenarioName;
   endpoint?: string;
+  bucket?: string;
+  envVar?: string;
+  modelId?: string;
+  timeoutMs?: string;
+  pollMs?: string;
+  scenarios?: string;
+  lastStates?: string;
 };
 
 const DEFAULT_FIXTURE_PATH = 'scripts/verify-m005-s01.fixture.json';
 const DEFAULT_TIMEOUT_MS = 20_000;
 const DEFAULT_POLL_MS = 1_000;
-const SCENARIO_CONFIGS: ScenarioConfig[] = [
+
+type ScenarioBlueprint = ScenarioConfig & { modelEnv?: string };
+
+const SCENARIO_BLUEPRINTS: ScenarioBlueprint[] = [
   {
     name: 'text-only',
     judgeSuffix: 'text-only',
@@ -92,6 +113,7 @@ const SCENARIO_CONFIGS: ScenarioConfig[] = [
     model: 'gateway/multimodal-model',
     forwarding: true,
     expectedPlan: 'multimodal',
+    modelEnv: 'S03_VERIFY_MODEL',
   },
   {
     name: 'blocked',
@@ -101,6 +123,55 @@ const SCENARIO_CONFIGS: ScenarioConfig[] = [
     expectedPlan: 'blocked',
   },
 ];
+
+function resolveScenarioModel(blueprint: ScenarioBlueprint) {
+  if (!blueprint.modelEnv) {
+    return blueprint.model;
+  }
+
+  const override = process.env[blueprint.modelEnv];
+  if (override === undefined) {
+    return blueprint.model;
+  }
+
+  const normalized = override.trim();
+  if (!normalized) {
+    throw new Error(`${blueprint.modelEnv} must be a non-empty string when set.`);
+  }
+
+  return normalized;
+}
+
+export function ensureScenarioModelsReady() {
+  for (const blueprint of SCENARIO_BLUEPRINTS) {
+    if (blueprint.modelEnv && process.env[blueprint.modelEnv] !== undefined) {
+      resolveScenarioModel(blueprint);
+    }
+  }
+}
+
+export function buildScenarioConfigs(): ScenarioConfig[] {
+  return SCENARIO_BLUEPRINTS.map((blueprint) => ({
+    name: blueprint.name,
+    judgeSuffix: blueprint.judgeSuffix,
+    model: resolveScenarioModel(blueprint),
+    forwarding: blueprint.forwarding,
+    expectedPlan: blueprint.expectedPlan,
+  }));
+}
+
+export function ensureGatewayEnvConfigured() {
+  if (!process.env.AI_GATEWAY_API_KEY?.trim()) {
+    throw new Error('Missing required environment variable: AI_GATEWAY_API_KEY.');
+  }
+
+  const rawBaseUrl = process.env.AI_GATEWAY_BASE_URL ?? 'https://ai-gateway.vercel.sh/v3/ai';
+  try {
+    new URL(rawBaseUrl);
+  } catch {
+    throw new Error('AI_GATEWAY_BASE_URL must be a valid http:// or https:// URL.');
+  }
+}
 
 const RESULTS_PAGE_SIZE = 25;
 
@@ -575,18 +646,21 @@ function assertPromptSnapshot(plan: string, promptSnapshot: string) {
   }
 }
 
-async function pollForScenarios(
+export async function pollForScenarios(
   options: VerifierOptions,
   queueId: string,
   questionId: string,
   submissionExternalId: string,
   scenarioMap: Map<ScenarioName, { judgeId: string; judgeName: string }>,
+  scenarioConfigs: ScenarioConfig[],
   timeoutMs: number,
-  fetchImpl: FetchLike
+  fetchImpl: FetchLike,
+  refs: PhaseRefs
 ): Promise<ScenarioResult[]> {
   const deadline = Date.now() + timeoutMs;
   const pending = new Set<ScenarioName>(scenarioMap.keys());
-  const latest: Partial<Record<ScenarioName, ScenarioResult>> = {};
+  const latest = new Map<ScenarioName, ScenarioResult>();
+  const lastState: Partial<Record<ScenarioName, ScenarioResult>> = {};
 
   while (Date.now() < deadline) {
     const results = await fetchResults(baseUrlFromOptions(options), queueId, questionId, timeoutMs, fetchImpl);
@@ -599,7 +673,13 @@ async function pollForScenarios(
       if (evaluation.question.id !== questionId) continue;
 
       const promptSnapshot = evaluation.prompt_snapshot;
-      if (!promptSnapshot) continue;
+      if (!promptSnapshot) {
+        throw new VerifierPhaseError(
+          'results-poll',
+          `Evaluation ${evaluation.id} is missing prompt_snapshot for scenario ${scenario}.`,
+          { ...refs, scenario, evaluationId: evaluation.id, questionId }
+        );
+      }
 
       const result: ScenarioResult = {
         scenario,
@@ -612,7 +692,8 @@ async function pollForScenarios(
         errorMessage: evaluation.error_message,
       };
 
-      latest[scenario] = result;
+      latest.set(scenario, result);
+      lastState[scenario] = result;
       pending.delete(scenario);
     }
 
@@ -624,23 +705,53 @@ async function pollForScenarios(
   }
 
   if (pending.size > 0) {
-    throw new Error('Timed out waiting for all evaluation scenarios.');
+    const pendingList = Array.from(pending).join(',');
+    const states = scenarioConfigs
+      .map((config) => {
+        const last = lastState[config.name];
+        return last ? `${config.name}=${last.status}:${last.evaluationId}` : `${config.name}=no-result`;
+      })
+      .join(', ');
+
+    throw new VerifierPhaseError(
+      'results-poll',
+      `Timed out after ${timeoutMs}ms (poll interval ${options.pollMs}ms) waiting for scenarios ${pendingList}. Last seen states: ${states}`,
+      {
+        ...refs,
+        scenarios: pendingList,
+        lastStates: states,
+        timeoutMs: String(timeoutMs),
+        pollMs: String(options.pollMs),
+      }
+    );
   }
 
-  return SCENARIO_CONFIGS.map((config) => {
-    const result = latest[config.name];
+  return scenarioConfigs.map((config) => {
+    const result = latest.get(config.name);
     if (!result) {
-      throw new Error(`Missing evaluation for scenario ${config.name}.`);
+      throw new VerifierPhaseError(
+        'results-poll',
+        `Missing evaluation for scenario ${config.name}.`,
+        { ...refs, scenario: config.name }
+      );
     }
 
     assertPromptSnapshot(config.expectedPlan, result.promptSnapshot);
 
     if (!result.modelUsed) {
-      throw new Error(`Evaluation ${result.evaluationId} did not persist model_used.`);
+      throw new VerifierPhaseError(
+        'results-poll',
+        `Evaluation ${result.evaluationId} did not persist model_used.`,
+        { ...refs, scenario: config.name, evaluationId: result.evaluationId }
+      );
     }
 
     if (config.expectedPlan === 'blocked' && !result.errorMessage) {
-      throw new Error(`Blocked scenario ${result.evaluationId} did not record an error message.`);
+      throw new VerifierPhaseError(
+        'results-poll',
+        `Blocked scenario ${result.evaluationId} did not record an error message.`,
+        { ...refs, scenario: config.name, evaluationId: result.evaluationId }
+      );
     }
 
     return result;
@@ -669,6 +780,24 @@ export async function runLiveVerification(options: VerifierOptions, fetchImpl: F
   let keepAppAlive = false;
 
   try {
+    await runPhase('env-readiness', { endpoint: options.baseUrl }, () => ensureGatewayEnvConfigured());
+
+    const supabase = await runPhase('schema-readiness', { endpoint: '/api/queues' }, async () => {
+      const client = await createSupabaseServiceClient(options.baseUrl);
+      for (const table of REQUIRED_TABLES) {
+        await assertTableReadable(client, table);
+      }
+      return client;
+    });
+
+    await runPhase('storage-readiness', { bucket: SUBMISSION_ATTACHMENT_STORAGE_BUCKET }, () =>
+      assertStorageBucketReady(supabase)
+    );
+
+    await runPhase('model-readiness', { scenario: 'multimodal' }, () => ensureScenarioModelsReady());
+
+    const scenarioConfigs = buildScenarioConfigs();
+
     const fixtureItems = await runPhase('fixture', { endpoint: options.fixturePath }, () =>
       loadFixture(options.fixturePath)
     );
@@ -698,7 +827,7 @@ export async function runLiveVerification(options: VerifierOptions, fetchImpl: F
 
     const scenarioMap = new Map<ScenarioName, { judgeId: string; judgeName: string }>();
 
-    for (const config of SCENARIO_CONFIGS) {
+    for (const config of scenarioConfigs) {
       const judgeName = `verify:m005-s03 ${config.judgeSuffix} ${Date.now()}`;
       const judge = await runPhase('judge-setup', { queueLabel, scenario: config.name }, () =>
         createJudge(options.baseUrl, judgeName, config.model, options.timeoutMs, fetchImpl)
@@ -718,8 +847,31 @@ export async function runLiveVerification(options: VerifierOptions, fetchImpl: F
 
     const evaluationSummaries = await runPhase(
       'results-poll',
-      { queueId: queueRow.id, runId },
-      () => pollForScenarios(options, queueRow.id, questionId, proofTarget.submissionExternalId, scenarioMap, options.timeoutMs, fetchImpl)
+      {
+        queueId: queueRow.id,
+        queueLabel,
+        runId,
+        questionId,
+        submissionExternalId: proofTarget.submissionExternalId,
+      },
+      () =>
+        pollForScenarios(
+          options,
+          queueRow.id,
+          questionId,
+          proofTarget.submissionExternalId,
+          scenarioMap,
+          scenarioConfigs,
+          options.timeoutMs,
+          fetchImpl,
+          {
+            queueId: queueRow.id,
+            queueLabel,
+            runId,
+            questionId,
+            submissionExternalId: proofTarget.submissionExternalId,
+          }
+        )
     );
 
     keepAppAlive = true;

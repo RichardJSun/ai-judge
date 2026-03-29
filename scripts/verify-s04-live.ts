@@ -1,8 +1,7 @@
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import { execFile } from 'node:child_process';
+import { type SupabaseClient } from '@supabase/supabase-js';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { parseArgs, promisify } from 'node:util';
+import { parseArgs } from 'node:util';
 import {
   parseQueueAssignmentList,
   parseQueueQuestionList,
@@ -39,12 +38,22 @@ import {
 } from './verify-s02-live';
 import { assertFilteredResultsResponse } from './verify-s03-live';
 import { assertPersistedAttachmentRow, assertDetailAttachmentTruth } from './verify-m005-s01';
+import { SUBMISSION_ATTACHMENT_STORAGE_BUCKET } from '../src/lib/submissions/attachment-storage';
+import {
+  assertStorageBucketReady,
+  assertTableReadable,
+  createSupabaseServiceClient,
+  REQUIRED_TABLES,
+} from './verify-supabase';
 
 type FetchLike = typeof fetch;
 type ReadFileLike = typeof readFile;
 
 type PhaseName =
+  | 'env-readiness'
   | 'schema-readiness'
+  | 'storage-readiness'
+  | 'model-readiness'
   | 'upload'
   | 'judge-crud'
   | 'assignment-persistence'
@@ -63,6 +72,7 @@ type PhaseRefs = {
   validJudgeId?: string;
   invalidJudgeId?: string;
   questionId?: string;
+  questionExternalId?: string;
   assignmentId?: string;
   runId?: string;
   submissionId?: string;
@@ -73,6 +83,13 @@ type PhaseRefs = {
   filter?: string;
   attachmentId?: string;
   storagePath?: string;
+  bucket?: string;
+  envVar?: string;
+  modelId?: string;
+  timeoutMs?: string;
+  pollMs?: string;
+  scenarios?: string;
+  lastStates?: string;
 };
 
 type QueueRow = {
@@ -236,17 +253,6 @@ export class VerifierPhaseError extends Error {
 const DEFAULT_FIXTURE_PATH = 'scripts/verify-s04-live.fixture.json';
 const DEFAULT_TIMEOUT_MS = 120_000;
 const DEFAULT_POLL_MS = 2_000;
-const REQUIRED_TABLES = [
-  'queues',
-  'question_templates',
-  'submissions',
-  'submission_answers',
-  'judges',
-  'judge_assignments',
-  'evaluation_runs',
-  'evaluations',
-] as const;
-const VALID_MODEL = process.env.S04_VERIFY_MODEL ?? process.env.S03_VERIFY_MODEL ?? 'gateway/multimodal-model';
 const INVALID_MODEL = 'openai/not-a-real-model-s04-live';
 const VALID_JUDGE_PREFIX = 'S04 Live Results Valid';
 const INVALID_JUDGE_PREFIX = 'S04 Live Results Invalid';
@@ -257,7 +263,6 @@ function shouldForwardAttachmentsForQuestion(index: number) {
   return index === ATTACHMENT_FORWARDING_INDEX;
 }
 
-const execFileAsync = promisify(execFile);
 
 function baseUrlFromInput(rawUrl: string | undefined) {
   if (!rawUrl?.trim()) {
@@ -417,67 +422,33 @@ async function readPageBody(fetchImpl: FetchLike, url: string, timeoutMs: number
   return body;
 }
 
-function stripOptionalQuotes(value: string) {
-  return value.replace(/^"|"$/g, '');
-}
 
-function isLocalBaseUrl(baseUrl: string) {
+export function ensureAiGatewayConfigured() {
+  if (!process.env.AI_GATEWAY_API_KEY?.trim()) {
+    throw new Error('Missing required environment variable: AI_GATEWAY_API_KEY.');
+  }
+
+  const rawBaseUrl = process.env.AI_GATEWAY_BASE_URL ?? 'https://ai-gateway.vercel.sh/v3/ai';
   try {
-    const parsed = new URL(baseUrl);
-    return parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1';
+    new URL(rawBaseUrl);
   } catch {
-    return false;
+    throw new Error('AI_GATEWAY_BASE_URL must be a valid http:// or https:// URL.');
   }
 }
 
-async function maybeReadLocalSupabaseEnv(baseUrl: string) {
-  if (!isLocalBaseUrl(baseUrl)) {
-    return null;
+export function resolveValidMultimodalModel() {
+  const override = process.env.S04_VERIFY_MODEL ?? process.env.S03_VERIFY_MODEL;
+  if (override === undefined) {
+    return 'gateway/multimodal-model';
   }
 
-  try {
-    const { stdout } = await execFileAsync('bunx', ['supabase', 'status', '-o', 'env']);
-    const envMap = new Map<string, string>();
-
-    for (const line of stdout.split(/\r?\n/)) {
-      const separatorIndex = line.indexOf('=');
-      if (separatorIndex <= 0) {
-        continue;
-      }
-
-      const key = line.slice(0, separatorIndex);
-      const value = stripOptionalQuotes(line.slice(separatorIndex + 1));
-      envMap.set(key, value);
-    }
-
-    const url = envMap.get('API_URL');
-    const secret = envMap.get('SECRET_KEY') ?? envMap.get('SERVICE_ROLE_KEY');
-
-    if (!url || !secret) {
-      return null;
-    }
-
-    return { url, secret };
-  } catch {
-    return null;
-  }
-}
-
-function requireEnv(name: string) {
-  const value = process.env[name];
-  if (!value) {
-    throw new Error(`Missing required environment variable: ${name}`);
+  const trimmed = override.trim();
+  if (!trimmed) {
+    const envVar = process.env.S04_VERIFY_MODEL !== undefined ? 'S04_VERIFY_MODEL' : 'S03_VERIFY_MODEL';
+    throw new Error(`${envVar} must be a non-empty string when set.`);
   }
 
-  return value;
-}
-
-async function createSupabaseServiceClient(baseUrl: string) {
-  const localEnv = await maybeReadLocalSupabaseEnv(baseUrl);
-  const url = localEnv?.url ?? requireEnv('NEXT_PUBLIC_SUPABASE_URL');
-  const secret = localEnv?.secret ?? process.env.SUPABASE_SECRET_KEY ?? requireEnv('SUPABASE_SERVICE_ROLE_KEY');
-
-  return createClient(url, secret);
+  return trimmed;
 }
 
 function summarizeFixture(items: Awaited<ReturnType<typeof loadFixture>>): FixtureSummary {
@@ -780,7 +751,7 @@ async function verifySchemaReadiness(baseUrl: string, timeoutMs: number, fetchIm
 
   for (const table of REQUIRED_TABLES) {
     await runPhase('schema-readiness', { endpoint: table }, async () => {
-      await checkTableReadable(supabase, table, 'schema-readiness', { endpoint: table });
+      await assertTableReadable(supabase, table);
     });
   }
 
@@ -1310,6 +1281,7 @@ async function createVerifierJudges(input: {
   queue: QueueRow;
   timeoutMs: number;
   fetchImpl: FetchLike;
+  validModel: string;
 }) {
   const tag = createVerificationTag();
   await deactivatePriorVerifierJudges(input.baseUrl, input.timeoutMs, input.fetchImpl);
@@ -1319,7 +1291,7 @@ async function createVerifierJudges(input: {
   const validExpected = {
     name: buildValidJudgeName(input.queue.queue_id, tag),
     system_prompt: buildValidJudgePrompt(input.queue.queue_id, tag),
-    model: VALID_MODEL,
+    model: input.validModel,
     active: true,
   } satisfies Pick<Judge, 'name' | 'system_prompt' | 'model' | 'active'>;
 
@@ -2213,18 +2185,33 @@ export async function runLiveVerification(
   fetchImpl: FetchLike = fetch,
   readFileImpl: ReadFileLike = readFile
 ): Promise<LiveVerificationSummary> {
+  await runPhase('env-readiness', { endpoint: options.baseUrl }, () => ensureAiGatewayConfigured());
   const fixtureItems = await runPhase('upload', { endpoint: options.fixturePath }, async () =>
     loadFixture(options.fixturePath, readFileImpl)
   );
   const target = getFixtureTarget(fixtureItems);
 
   const supabase = await verifySchemaReadiness(options.baseUrl, options.timeoutMs, fetchImpl);
+  await runPhase(
+    'storage-readiness',
+    { bucket: SUBMISSION_ATTACHMENT_STORAGE_BUCKET },
+    () => assertStorageBucketReady(supabase)
+  );
   await runPhase('upload', { endpoint: '/api/upload', queueLabel: target.queueLabel }, async () => {
     await uploadFixture(options, fixtureItems, fetchImpl);
   });
 
   const persistedTarget = await runPhase('upload', { queueLabel: target.queueLabel }, async () =>
     findPersistedQueueAndQuestions(supabase, target)
+  );
+
+  const validModel = await runPhase(
+    'model-readiness',
+    {
+      queueId: persistedTarget.queue.id,
+      queueLabel: persistedTarget.queue.queue_id,
+    },
+    () => resolveValidMultimodalModel()
   );
 
   const verifierJudges = await runPhase(
@@ -2240,6 +2227,7 @@ export async function runLiveVerification(
         queue: persistedTarget.queue,
         timeoutMs: options.timeoutMs,
         fetchImpl,
+        validModel,
       })
   );
 

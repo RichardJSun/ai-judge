@@ -5,10 +5,13 @@ import {
   assertRunStartPayload,
   buildApiUrls,
   buildInspectionUrls,
+  buildScenarioProofEntries,
+  ensureAiGatewayConfigured,
   formatApiTargets,
   formatInspectionTargets,
   formatSetupSummary,
   parseVerifierOptions,
+  resolveValidMultimodalModel,
   runPhase,
   type LiveVerificationSummary,
   VerifierPhaseError,
@@ -271,5 +274,61 @@ describe('summary helpers', () => {
     expect(formatApiTargets(createSummary())).toBe(
       'runPreview=http://localhost:3000/api/queues/queue-uuid-1/run-preview runStart=http://localhost:3000/api/queues/queue-uuid-1/runs runProgress=http://localhost:3000/api/queues/queue-uuid-1/runs/run-uuid-1 results=http://localhost:3000/api/queues/queue-uuid-1/results?page=1&judgeId=judge-valid-uuid-1&judgeId=judge-invalid-uuid-1 submissionDetail=http://localhost:3000/api/queues/queue-uuid-1/submissions/submission-uuid-1'
     );
+  });
+});
+
+describe('readiness helpers', () => {
+  it('fails when AI_GATEWAY_API_KEY is missing', () => {
+    const originalKey = process.env.AI_GATEWAY_API_KEY;
+    delete process.env.AI_GATEWAY_API_KEY;
+    expect(() => ensureAiGatewayConfigured()).toThrow('AI_GATEWAY_API_KEY');
+    if (originalKey !== undefined) {
+      process.env.AI_GATEWAY_API_KEY = originalKey;
+    } else {
+      delete process.env.AI_GATEWAY_API_KEY;
+    }
+  });
+});
+
+describe('model overrides', () => {
+  it('rejects empty S04_VERIFY_MODEL overrides', () => {
+    const originalOverride = process.env.S04_VERIFY_MODEL;
+    process.env.S04_VERIFY_MODEL = '   ';
+    expect(() => resolveValidMultimodalModel()).toThrow('S04_VERIFY_MODEL');
+    if (originalOverride !== undefined) {
+      process.env.S04_VERIFY_MODEL = originalOverride;
+    } else {
+      delete process.env.S04_VERIFY_MODEL;
+    }
+  });
+});
+
+describe('buildScenarioProofEntries', () => {
+  it('fails when an evaluation has a malformed plan marker', () => {
+    const evaluations: ResultsEvaluation[] = [
+      {
+        id: 'eval-1',
+        verdict: 'pass',
+        reasoning: 'ok',
+        prompt_snapshot: 'Plan marker: not-json',
+        model_used: 'gateway/text-only-model',
+        tokens_used: 0,
+        latency_ms: 0,
+        retry_count: 0,
+        error_message: null,
+        created_at: '2024-01-01T00:00:00.000Z',
+        status: 'completed',
+        submission: { id: 'submission-1', external_id: 'submission-ext-1' },
+        question: { id: 'question-1', external_id: 'q-template-1', question_text: 'Text' },
+        judge: { id: 'judge-1', name: 'Judge One', model: 'gateway/text-only-model' },
+      },
+    ];
+
+    expect(() =>
+      buildScenarioProofEntries({
+        evaluations,
+        refs: { queueId: 'queue-1', queueLabel: 'queue', runId: 'run-1' },
+      })
+    ).toThrow('malformed plan marker');
   });
 });

@@ -102,6 +102,8 @@ What they prove:
 - `verify:s03-live` checks the queue results workflow end to end, including real results persistence, judge/question/verdict filters, pass-rate aggregation, and the results page reachability.
 - `verify:s04-live` proves the full spec-ordered reviewer walkthrough end to end: upload → judges CRUD → assignment → run → results. It also emits the concrete queue, judge, question, assignment, run, page, and filtered API targets that a reviewer can copy directly into a browser follow-up.
 
+Both `verify-m005-s03` and `verify:s04-live` now surface the readiness/poll budgets (`env-readiness`, `schema-readiness`, `storage-readiness`, `model-readiness`, `results-poll`) so you know immediately whether migrations, storage buckets, env knobs, or the chosen model are blocking the proof before the expensive upload/run phases start — tune the `--timeout-ms` and `--poll-ms` overrides if a phase consistently exhausts its budget.
+
 All four commands require a reachable Next.js app at `--base-url`. If you do not pass the flag, the scripts only fall back to `BASE_URL` when that env var is set.
 
 ## Attachment-backed launchability checklist
