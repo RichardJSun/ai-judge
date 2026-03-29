@@ -144,5 +144,5 @@ export interface SubmissionDetailResponse {
   submission: Pick<Submission, 'id' | 'queue_id' | 'external_id' | 'labeling_task_id' | 'submitted_at' | 'created_at'>;
   summary: SubmissionDetailSummary;
   questions: SubmissionDetailQuestion[];
-  attachments?: SubmissionDetailAttachment[];
+  attachments: SubmissionDetailAttachment[];
 }

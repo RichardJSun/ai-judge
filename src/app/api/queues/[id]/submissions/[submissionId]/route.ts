@@ -22,7 +22,7 @@ type SubmissionDetailRouteDeps = {
   timeoutMs?: number;
 };
 
-type RoutePhase = 'client' | 'queue' | 'submission' | 'questions' | 'answers' | 'normalize' | 'lookup';
+type RoutePhase = 'client' | 'queue' | 'submission' | 'questions' | 'answers' | 'attachments' | 'normalize' | 'lookup';
 
 const defaultDeps: SubmissionDetailRouteDeps = {
   createServiceClient,
@@ -127,8 +127,7 @@ async function runPhaseQuery<T>(
     timeoutSignal: AbortSignal;
   }
 ) {
-  const queryPromise =
-    typeof query.abortSignal === 'function' ? query.abortSignal(options.signal) : query;
+  const queryPromise = typeof query.abortSignal === 'function' ? query.abortSignal(options.signal) : query;
 
   const timeoutPromise = new Promise<never>((_, reject) => {
     const abort = () => {
@@ -223,12 +222,20 @@ export async function handleGetSubmissionDetail(
       .select('id, submission_id, question_template_id, answer_json, created_at')
       .eq('submission_id', submissionId)
       .order('created_at', { ascending: true });
+    const submissionAttachmentsQuery = supabase
+      .from('submission_attachments')
+      .select(
+        'id, submission_id, external_attachment_id, source_kind, file_name, media_type, byte_size, storage_status, storage_error, created_at'
+      )
+      .eq('submission_id', submissionId)
+      .order('created_at', { ascending: true });
 
-    const [queue, submission, questionTemplates, submissionAnswers] = await Promise.all([
+    const [queue, submission, questionTemplates, submissionAnswers, submissionAttachments] = await Promise.all([
       runPhaseQuery(queueQuery, { phase: 'queue', signal, timeoutSignal }),
       runPhaseQuery(submissionQuery, { phase: 'submission', signal, timeoutSignal }),
       runPhaseQuery(questionTemplatesQuery, { phase: 'questions', signal, timeoutSignal }),
       runPhaseQuery(submissionAnswersQuery, { phase: 'answers', signal, timeoutSignal }),
+      runPhaseQuery(submissionAttachmentsQuery, { phase: 'attachments', signal, timeoutSignal }),
     ]);
 
     if (!queue || !submission) {
@@ -245,6 +252,7 @@ export async function handleGetSubmissionDetail(
       submission,
       questionTemplates: expectArray(questionTemplates, 'question templates'),
       submissionAnswers: expectArray(submissionAnswers, 'submission answers'),
+      submissionAttachments: expectArray(submissionAttachments, 'submission attachments'),
     });
 
     return NextResponse.json(response);

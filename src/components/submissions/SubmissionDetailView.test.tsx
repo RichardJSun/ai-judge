@@ -69,6 +69,7 @@ function createDetailResponse(overrides: Partial<SubmissionDetailResponse> = {})
                 rawAnswer: null,
             },
         ],
+        attachments: [],
         ...overrides,
     };
 }

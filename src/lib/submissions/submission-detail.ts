@@ -1,10 +1,17 @@
-import type { SubmissionDetailAnswer, SubmissionDetailQuestion, SubmissionDetailResponse } from '@/types/api';
+import type {
+  SubmissionDetailAnswer,
+  SubmissionDetailAttachment,
+  SubmissionDetailQuestion,
+  SubmissionDetailResponse,
+} from '@/types/api';
+import type { AttachmentStorageStatusEnum } from '@/types/db';
 
 export interface SubmissionDetailInput {
   queue: unknown;
   submission: unknown;
   questionTemplates: unknown[];
   submissionAnswers: unknown[];
+  submissionAttachments: unknown[];
 }
 
 interface QueueRecord {
@@ -39,6 +46,19 @@ interface SubmissionAnswerRecord {
   created_at: string;
 }
 
+interface SubmissionAttachmentRecord {
+  id: string;
+  submission_id: string;
+  external_attachment_id: string;
+  source_kind: string;
+  file_name: string;
+  media_type: string;
+  byte_size: number;
+  storage_status: AttachmentStorageStatusEnum;
+  storage_error: string | null;
+  created_at: string;
+}
+
 export class SubmissionDetailError extends Error {
   readonly status: number;
   readonly publicMessage: string;
@@ -56,6 +76,7 @@ export function createSubmissionDetailResponse({
   submission,
   questionTemplates,
   submissionAnswers,
+  submissionAttachments,
 }: SubmissionDetailInput): SubmissionDetailResponse {
   const normalizedQueue = normalizeQueue(queue);
   const normalizedSubmission = normalizeSubmission(submission);
@@ -70,6 +91,7 @@ export function createSubmissionDetailResponse({
     .map((row) => normalizeQuestionTemplate(row, normalizedQueue.id))
     .sort(compareQuestionTemplates);
   const answersByQuestionId = buildAnswerMap(submissionAnswers, normalizedSubmission.id);
+  const attachments = normalizeSubmissionAttachments(submissionAttachments, normalizedSubmission.id);
 
   const questions: SubmissionDetailQuestion[] = orderedQuestions.map((question) => {
     const answer = answersByQuestionId.get(question.id);
@@ -120,6 +142,7 @@ export function createSubmissionDetailResponse({
       missingQuestions,
     },
     questions,
+    attachments,
   };
 }
 
@@ -140,7 +163,46 @@ function buildAnswerMap(rows: unknown[], submissionId: string): Map<string, Subm
   return answers;
 }
 
+function normalizeSubmissionAttachments(rows: unknown[], submissionId: string): SubmissionDetailAttachment[] {
+  const attachments = new Map<string, SubmissionAttachmentRecord>();
+  const externalAttachmentIds = new Set<string>();
+
+  for (const row of rows) {
+    const attachment = normalizeSubmissionAttachment(row, submissionId);
+
+    if (attachments.has(attachment.id)) {
+      throw new SubmissionDetailError(
+        `Submission ${submissionId} returned duplicate attachment ids for ${attachment.id}.`
+      );
+    }
+
+    if (externalAttachmentIds.has(attachment.external_attachment_id)) {
+      throw new SubmissionDetailError(
+        `Submission ${submissionId} returned duplicate external attachment ids for ${attachment.external_attachment_id}.`
+      );
+    }
+
+    attachments.set(attachment.id, attachment);
+    externalAttachmentIds.add(attachment.external_attachment_id);
+  }
+
+  return [...attachments.values()].sort(compareSubmissionAttachments).map((attachment) => ({
+    id: attachment.id,
+    external_attachment_id: attachment.external_attachment_id,
+    source_kind: attachment.source_kind,
+    file_name: attachment.file_name,
+    media_type: attachment.media_type,
+    byte_size: attachment.byte_size,
+    storage_status: attachment.storage_status,
+    storage_error: attachment.storage_error,
+  }));
+}
+
 function compareQuestionTemplates(a: QuestionTemplateRecord, b: QuestionTemplateRecord): number {
+  return a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id);
+}
+
+function compareSubmissionAttachments(a: SubmissionAttachmentRecord, b: SubmissionAttachmentRecord): number {
   return a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id);
 }
 
@@ -206,6 +268,48 @@ function normalizeSubmissionAnswer(row: unknown, submissionId: string): Submissi
   };
 }
 
+function normalizeSubmissionAttachment(row: unknown, submissionId: string): SubmissionAttachmentRecord {
+  const record = asRecord(row, 'submission attachment');
+  const attachmentSubmissionId = asString(record.submission_id, 'submission_attachment.submission_id');
+
+  if (attachmentSubmissionId !== submissionId) {
+    throw new SubmissionDetailError(
+      `Submission attachment ${asString(record.id, 'submission_attachment.id')} belongs to submission ${attachmentSubmissionId}, not submission ${submissionId}.`
+    );
+  }
+
+  const storageStatus = asAttachmentStorageStatus(
+    record.storage_status,
+    'submission_attachment.storage_status'
+  );
+  const storageError = asNullableNonEmptyString(
+    record.storage_error,
+    'submission_attachment.storage_error'
+  );
+
+  if (storageStatus === 'stored' && storageError) {
+    throw new SubmissionDetailError(
+      `Submission attachment ${asString(record.id, 'submission_attachment.id')} reported storage_status stored with a storage_error.`
+    );
+  }
+
+  return {
+    id: asString(record.id, 'submission_attachment.id'),
+    submission_id: attachmentSubmissionId,
+    external_attachment_id: asString(
+      record.external_attachment_id,
+      'submission_attachment.external_attachment_id'
+    ),
+    source_kind: asString(record.source_kind, 'submission_attachment.source_kind'),
+    file_name: asString(record.file_name, 'submission_attachment.file_name'),
+    media_type: asString(record.media_type, 'submission_attachment.media_type'),
+    byte_size: asPositiveInteger(record.byte_size, 'submission_attachment.byte_size'),
+    storage_status: storageStatus,
+    storage_error: storageError,
+    created_at: asString(record.created_at, 'submission_attachment.created_at'),
+  };
+}
+
 function normalizeAnswer(answerJson: Record<string, unknown>): SubmissionDetailAnswer {
   const directValue = normalizeAnswerValue(answerJson.value);
   if (directValue !== undefined) {
@@ -261,6 +365,36 @@ function asNullableString(value: unknown, label: string): string | null {
   }
 
   throw new SubmissionDetailError(`Expected ${label} to be a string or null.`);
+}
+
+function asNullableNonEmptyString(value: unknown, label: string): string | null {
+  if (value == null) {
+    return null;
+  }
+
+  if (typeof value === 'string' && value.length > 0) {
+    return value;
+  }
+
+  throw new SubmissionDetailError(`Expected ${label} to be a non-empty string or null.`);
+}
+
+function asPositiveInteger(value: unknown, label: string): number {
+  if (typeof value === 'number' && Number.isInteger(value) && value > 0) {
+    return value;
+  }
+
+  throw new SubmissionDetailError(`Expected ${label} to be a positive integer.`);
+}
+
+function asAttachmentStorageStatus(value: unknown, label: string): AttachmentStorageStatusEnum {
+  if (value === 'stored' || value === 'unavailable' || value === 'error') {
+    return value;
+  }
+
+  throw new SubmissionDetailError(
+    `Expected ${label} to be one of stored, unavailable, or error.`
+  );
 }
 
 function asJsonObject(value: unknown, label: string): Record<string, unknown> {

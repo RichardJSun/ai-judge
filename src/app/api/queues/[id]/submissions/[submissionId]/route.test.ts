@@ -82,7 +82,7 @@ afterEach(() => {
 });
 
 describe('handleGetSubmissionDetail', () => {
-  it('returns the queue-scoped submission detail contract with explicit missing answers', async () => {
+  it('returns the queue-scoped submission detail contract with persisted attachment truth', async () => {
     const response = await handleGetSubmissionDetail(
       createRequest(),
       {
@@ -135,6 +135,33 @@ describe('handleGetSubmissionDetail', () => {
                   created_at: '2026-03-28T10:06:00.000Z',
                 },
               ]),
+            submission_attachments: () =>
+              json([
+                {
+                  id: 'attachment-row-2',
+                  submission_id: 'submission-1',
+                  external_attachment_id: 'attachment-external-2',
+                  source_kind: 'inline_base64',
+                  file_name: 'second.png',
+                  media_type: 'image/png',
+                  byte_size: 2048,
+                  storage_status: 'unavailable',
+                  storage_error: 'Object is not currently retrievable.',
+                  created_at: '2026-03-28T10:08:00.000Z',
+                },
+                {
+                  id: 'attachment-row-1',
+                  submission_id: 'submission-1',
+                  external_attachment_id: 'attachment-external-1',
+                  source_kind: 'inline_base64',
+                  file_name: 'first.pdf',
+                  media_type: 'application/pdf',
+                  byte_size: 1024,
+                  storage_status: 'stored',
+                  storage_error: null,
+                  created_at: '2026-03-28T10:07:00.000Z',
+                },
+              ]),
           }) as never,
         timeoutMs: SUBMISSION_DETAIL_TIMEOUT_MS,
       }
@@ -182,6 +209,28 @@ describe('handleGetSubmissionDetail', () => {
           rawAnswer: { value: 'Answered second.' },
         },
       ],
+      attachments: [
+        {
+          id: 'attachment-row-1',
+          external_attachment_id: 'attachment-external-1',
+          source_kind: 'inline_base64',
+          file_name: 'first.pdf',
+          media_type: 'application/pdf',
+          byte_size: 1024,
+          storage_status: 'stored',
+          storage_error: null,
+        },
+        {
+          id: 'attachment-row-2',
+          external_attachment_id: 'attachment-external-2',
+          source_kind: 'inline_base64',
+          file_name: 'second.png',
+          media_type: 'image/png',
+          byte_size: 2048,
+          storage_status: 'unavailable',
+          storage_error: 'Object is not currently retrievable.',
+        },
+      ],
     });
   });
 
@@ -198,6 +247,7 @@ describe('handleGetSubmissionDetail', () => {
             submissions: () => json(null),
             question_templates: () => json([]),
             submission_answers: () => json([]),
+            submission_attachments: () => json([]),
           }) as never,
       }
     );
@@ -228,8 +278,9 @@ describe('handleGetSubmissionDetail', () => {
               submitted_at: null,
               created_at: '2026-03-28T10:05:00.000Z',
             }),
-            question_templates: () => failure('select * from question_templates where queue_id = queue-1 leaked'),
+            question_templates: () => json([]),
             submission_answers: () => json([]),
+            submission_attachments: () => failure('select * from submission_attachments where submission_id = submission-1 leaked'),
           }) as never,
       }
     );
@@ -237,8 +288,55 @@ describe('handleGetSubmissionDetail', () => {
     expect(response.status).toBe(500);
     expect(await readJson(response)).toEqual({
       error: 'Failed to load submission detail.',
-      phase: 'questions',
-      detail: 'The questions read failed before a complete submission detail response could be built.',
+      phase: 'attachments',
+      detail: 'The attachments read failed before a complete submission detail response could be built.',
+    });
+  });
+
+  it('surfaces helper-thrown attachment contract errors with the normalizer public message', async () => {
+    const response = await handleGetSubmissionDetail(
+      createRequest(),
+      {
+        params: Promise.resolve({ id: 'queue-1', submissionId: 'submission-1' }),
+      },
+      {
+        createServiceClient: () =>
+          new FakeSupabaseClient({
+            queues: () => json({ id: 'queue-1', queue_id: 'queue-external-1', created_at: '2026-03-28T10:00:00.000Z' }),
+            submissions: () => json({
+              id: 'submission-1',
+              queue_id: 'queue-1',
+              external_id: 'submission-external-1',
+              labeling_task_id: null,
+              submitted_at: null,
+              created_at: '2026-03-28T10:05:00.000Z',
+            }),
+            question_templates: () => json([]),
+            submission_answers: () => json([]),
+            submission_attachments: () =>
+              json([
+                {
+                  id: 'attachment-row-1',
+                  submission_id: 'submission-2',
+                  external_attachment_id: 'attachment-external-1',
+                  source_kind: 'inline_base64',
+                  file_name: 'evidence.pdf',
+                  media_type: 'application/pdf',
+                  byte_size: 1024,
+                  storage_status: 'stored',
+                  storage_error: null,
+                  created_at: '2026-03-28T10:07:00.000Z',
+                },
+              ]),
+          }) as never,
+      }
+    );
+
+    expect(response.status).toBe(500);
+    expect(await readJson(response)).toEqual({
+      error: 'Malformed submission detail returned from storage.',
+      phase: 'normalize',
+      detail: 'Submission attachment attachment-row-1 belongs to submission submission-2, not submission submission-1.',
     });
   });
 
@@ -262,6 +360,7 @@ describe('handleGetSubmissionDetail', () => {
             }),
             question_templates: () => ({ data: {} as never, error: null }),
             submission_answers: () => json([]),
+            submission_attachments: () => json([]),
           }) as never,
       }
     );

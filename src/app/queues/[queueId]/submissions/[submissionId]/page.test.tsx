@@ -64,6 +64,7 @@ function createDetailResponse(): SubmissionDetailResponse {
         rawAnswer: null,
       },
     ],
+    attachments: [],
   };
 }
 

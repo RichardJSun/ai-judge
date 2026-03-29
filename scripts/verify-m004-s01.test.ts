@@ -80,6 +80,7 @@ function createDetailResponse(): SubmissionDetailResponse {
         rawAnswer: { value: 'Answered second.' },
       },
     ],
+    attachments: [],
   };
 }
 
