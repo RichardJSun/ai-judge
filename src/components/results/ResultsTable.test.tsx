@@ -16,6 +16,7 @@ function createEvaluation(overrides: Partial<ResultsEvaluation> = {}): ResultsEv
     id: 'evaluation-1',
     verdict: 'pass',
     reasoning: LONG_REASONING,
+    prompt_snapshot: 'Prompt snapshot content describing stored attachments and forwarding.',
     model_used: 'gateway/model-a',
     tokens_used: 321,
     latency_ms: 875,
@@ -78,6 +79,10 @@ describe('ResultsTable', () => {
     expect(html).toContain('Pass');
     expect(html).toContain(summarizeReasoning(evaluation.reasoning));
     expect(html).toContain(formatCreatedAt(evaluation.created_at));
+    expect(html).toContain('Evaluation status');
+    expect(html).toContain('completed');
+    expect(html).toContain('Prompt snapshot');
+    expect(html).toContain('Prompt snapshot content describing stored attachments and forwarding.');
   });
 
   it('keeps errored rows with long submission ids and missing optional audit fields renderable behind a valid detail link', () => {
@@ -90,6 +95,7 @@ describe('ResultsTable', () => {
             id: 'evaluation-2',
             verdict: null,
             reasoning: null,
+            prompt_snapshot: null,
             model_used: null,
             tokens_used: null,
             latency_ms: null,
@@ -111,6 +117,10 @@ describe('ResultsTable', () => {
     expect(html).toContain('Judge Atlas');
     expect(html).toContain('Error');
     expect(html).toContain('—');
+    expect(html).toContain('Evaluation status');
+    expect(html).toContain('error');
+    expect(html).toContain('Prompt snapshot');
+    expect(html).toContain('Prompt snapshot was not captured for this run.');
   });
 
   it('renders multiple visible rows for the same submission without adding a separate action column', () => {

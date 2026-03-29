@@ -271,6 +271,16 @@ function formatForwardingState(attachmentForwarding: boolean) {
     : 'Attachment forwarding disabled';
 }
 
+function describeAssignmentForwarding(assignment: QueueAssignmentRecord) {
+  const forwardingState = assignment.attachment_forwarding ? 'enabled' : 'disabled';
+  const assignmentContext =
+    assignment.judge_status === 'active'
+      ? 'active and included in previews and runs.'
+      : 'inactive and excluded from runs.';
+
+  return `Attachment forwarding is ${forwardingState} while this judge is ${assignmentContext}`;
+}
+
 export function AssignmentMatrixTable({
   questions,
   visibleJudges,
@@ -474,6 +484,9 @@ export function AssignmentMatrixTable({
                                           />
                                         ))}
                                       </Stack>
+                                      <Typography variant="body2" color="text.secondary">
+                                        {describeAssignmentForwarding(assignment)}
+                                      </Typography>
                                       <FormControlLabel
                                         control={
                                           <Switch
@@ -486,7 +499,7 @@ export function AssignmentMatrixTable({
                                                 attachmentForwarding: checked,
                                               })
                                             }
-                                            disabled={togglePending}
+                                            disabled={togglePending || assignment.judge_status !== 'active'}
                                           />
                                         }
                                         label="Forward stored attachments"

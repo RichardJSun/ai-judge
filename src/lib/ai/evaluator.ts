@@ -71,6 +71,7 @@ export interface EvaluationPlanResult {
   forwardingRequested: boolean;
   supportedMedia?: readonly string[];
   blockedReason?: string;
+  forwardedAttachments: readonly EvaluationAttachment[];
 }
 
 const MULTIMODAL_MODEL_CAPABILITIES: Record<string, readonly string[]> = {
@@ -130,6 +131,7 @@ export function planEvaluationRequest(params: EvaluateParams): EvaluationPlanRes
     kind: 'text-only',
     manifestText,
     forwardingRequested: params.attachmentForwarding,
+    forwardedAttachments: [],
   };
 
   if (!params.attachmentForwarding || params.attachments.length === 0) {
@@ -152,20 +154,24 @@ export function planEvaluationRequest(params: EvaluateParams): EvaluationPlanRes
     };
   }
 
-  for (const attachment of params.attachments) {
-    if (!modelCapabilities.includes(attachment.mediaType)) {
-      return {
-        ...basePlan,
-        kind: 'blocked',
-        blockedReason: `Attachment ${attachment.externalAttachmentId} uses unsupported media type ${attachment.mediaType} for model ${params.judge.model}. Supported types: ${modelCapabilities.join(', ')}.`,
-      };
-    }
+  const supportedAttachments = params.attachments.filter((attachment) =>
+    modelCapabilities.includes(attachment.mediaType)
+  );
+
+  if (supportedAttachments.length === 0) {
+    const unsupportedTypes = [...new Set(params.attachments.map((attachment) => attachment.mediaType))];
+    return {
+      ...basePlan,
+      kind: 'blocked',
+      blockedReason: `Attachments use unsupported media types ${unsupportedTypes.join(', ')} for model ${params.judge.model}. Supported types: ${modelCapabilities.join(', ')}.`,
+    };
   }
 
   return {
     ...basePlan,
     kind: 'multimodal',
     supportedMedia: [...modelCapabilities],
+    forwardedAttachments: supportedAttachments,
   };
 }
 
@@ -377,7 +383,7 @@ export async function evaluateSingle(
   let downloadedAttachments: DownloadedSubmissionAttachment[] = [];
   if (plan.kind === 'multimodal') {
     try {
-      downloadedAttachments = await downloadAttachmentsForEvaluation(supabase, params.attachments);
+      downloadedAttachments = await downloadAttachmentsForEvaluation(supabase, plan.forwardedAttachments);
     } catch (error) {
       await updateEvaluation(
         supabase,

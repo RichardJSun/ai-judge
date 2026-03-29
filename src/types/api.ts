@@ -33,6 +33,7 @@ export interface ResultsEvaluation {
   id: Evaluation['id'];
   verdict: Evaluation['verdict'];
   reasoning: Evaluation['reasoning'];
+  prompt_snapshot: Evaluation['prompt_snapshot'];
   model_used: Evaluation['model_used'];
   tokens_used: Evaluation['tokens_used'];
   latency_ms: Evaluation['latency_ms'];

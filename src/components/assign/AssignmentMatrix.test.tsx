@@ -146,6 +146,8 @@ describe('AssignmentMatrixContent', () => {
     expect(html).toContain('Attachment forwarding enabled');
     expect(html).toContain('Attachment forwarding disabled');
     expect(html).toContain('Forward stored attachments');
+    expect(html).toContain('Attachment forwarding is enabled while this judge is active and included in previews and runs.');
+    expect(html).toContain('Attachment forwarding is disabled while this judge is inactive and excluded from runs.');
     expect(html).toContain('Prompt fields for newly checked active judges on this question:');
     expect(html).toContain('Question Type');
   });

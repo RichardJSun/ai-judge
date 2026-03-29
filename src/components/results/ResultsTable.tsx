@@ -195,6 +195,35 @@ function ExpandableRow({
                   <AuditField label="Retries" value={formatRetryCount(evaluation.retry_count)} />
                 </Stack>
 
+                <Box>
+                  <Typography variant="caption" color="text.secondary" display="block" mb={0.5}>
+                    Evaluation status
+                  </Typography>
+                  <Typography variant="body2" fontWeight={600} sx={{ textTransform: 'capitalize' }}>
+                    {evaluation.status}
+                  </Typography>
+                </Box>
+
+                <Box>
+                  <Typography variant="caption" color="text.secondary" display="block" mb={0.5}>
+                    Prompt snapshot
+                  </Typography>
+                  <Paper variant="outlined" sx={{ p: 1, bgcolor: 'grey.50' }}>
+                    <Typography
+                      component="pre"
+                      variant="body2"
+                      sx={{
+                        m: 0,
+                        fontFamily: 'monospace',
+                        whiteSpace: 'pre-wrap',
+                        wordBreak: 'break-word',
+                      }}
+                    >
+                      {evaluation.prompt_snapshot ?? 'Prompt snapshot was not captured for this run.'}
+                    </Typography>
+                  </Paper>
+                </Box>
+
                 {evaluation.error_message ? (
                   <Box>
                     <Typography variant="caption" color="error" display="block" mb={0.5}>

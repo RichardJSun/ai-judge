@@ -617,7 +617,7 @@ describe('evaluateSingle', () => {
       attachmentForwarding: true,
       attachments,
     });
-    const blockedReason = `Attachment ${attachments[0].externalAttachmentId} uses unsupported media type ${attachments[0].mediaType} for model ${supportedModel}. Supported types: image/png, image/jpeg.`;
+    const blockedReason = `Attachments use unsupported media types ${attachments[0].mediaType} for model ${supportedModel}. Supported types: image/png, image/jpeg.`;
 
     await expect(evaluateSingle(supabase, params, deps)).rejects.toThrow(blockedReason);
 
@@ -675,6 +675,7 @@ describe('planEvaluationRequest', () => {
 
     expect(plan.kind).toBe('multimodal');
     expect(plan.supportedMedia).toEqual(['image/png', 'image/jpeg']);
+    expect(plan.forwardedAttachments).toEqual(attachments);
     expect(plan.manifestText.indexOf('externalAttachmentId=a')).toBeLessThan(
       plan.manifestText.indexOf('externalAttachmentId=z')
     );

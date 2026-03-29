@@ -210,6 +210,9 @@ function AttachmentStatusChip({ attachment }: { attachment: SubmissionDetailAtta
 }
 
 function AttachmentCard({ attachment }: { attachment: SubmissionDetailAttachment }) {
+    const statusLabel = getAttachmentStatusLabel(attachment.storage_status);
+    const statusDescription = getAttachmentStatusDescription(attachment.storage_status);
+
     return (
         <Paper component="li" variant="outlined" sx={{ p: 2, listStyle: 'none' }}>
             <Stack spacing={1.5}>
@@ -231,7 +234,7 @@ function AttachmentCard({ attachment }: { attachment: SubmissionDetailAttachment
                 </Stack>
 
                 <Typography variant="body2" color="text.secondary" sx={{ overflowWrap: 'anywhere' }}>
-                    {getAttachmentStatusDescription(attachment.storage_status)}
+                    Storage status — {statusLabel}. {statusDescription}
                 </Typography>
             </Stack>
         </Paper>

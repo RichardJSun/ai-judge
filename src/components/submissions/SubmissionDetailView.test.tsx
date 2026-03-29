@@ -179,6 +179,7 @@ describe('SubmissionDetailView', () => {
         expect(html).toContain('Durable storage succeeded for this attachment.');
         expect(html).toContain('Attachment metadata was captured, but the durable file is currently unavailable.');
         expect(html).toContain('Attachment metadata was captured, but durable storage reported an error.');
+        expect(html).toContain('Storage status — Stored. Durable storage succeeded for this attachment.');
         expect(html).toContain('this-is-a-very-long-reviewer-visible-filename-that-should-still-wrap-cleanly-without-pushing-the-layout-horizontally.pdf');
         expect(html).not.toContain('submission-attachments/private/path.txt');
         expect(html).not.toContain('storage backend said no');

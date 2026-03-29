@@ -25,7 +25,7 @@ export async function GET(
     let resultsQuery = supabase
       .from('evaluations')
       .select(
-        `id, verdict, reasoning, model_used, tokens_used, latency_ms, retry_count, error_message, created_at, status,
+        `id, verdict, reasoning, prompt_snapshot, model_used, tokens_used, latency_ms, retry_count, error_message, created_at, status,
          submissions!inner(id, external_id, queue_id),
          question_templates!inner(id, external_id, question_text),
          judges!inner(id, name, model)`,

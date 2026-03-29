@@ -178,6 +178,7 @@ function normalizeResultsEvaluation(row: unknown): ResultsEvaluation {
     id: asString(record.id, 'evaluation.id'),
     verdict: asNullableVerdict(record.verdict, 'evaluation.verdict'),
     reasoning: asNullableString(record.reasoning, 'evaluation.reasoning'),
+    prompt_snapshot: asNullableString(record.prompt_snapshot, 'evaluation.prompt_snapshot'),
     model_used: asNullableString(record.model_used, 'evaluation.model_used'),
     tokens_used: asNullableNumber(record.tokens_used, 'evaluation.tokens_used'),
     latency_ms: asNullableNumber(record.latency_ms, 'evaluation.latency_ms'),
