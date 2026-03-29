@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'bun:test';
+import { afterEach, describe, expect, it, mock } from 'bun:test';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { REVIEWER_TABLE_SURFACE_TEST_ID } from '@/components/layout/ReviewerTableSurface';
 import type {
@@ -8,8 +8,11 @@ import type {
 } from '@/lib/assignments/queue-assignment-state';
 import {
   AssignmentMatrixContent,
+  fetchAssignments,
   type AssignmentMatrixContentProps,
 } from './AssignmentMatrix';
+
+const originalFetch = globalThis.fetch;
 
 const ACTIVE_JUDGE: VisibleAssignmentJudge = {
   id: 'judge-active',
@@ -35,7 +38,7 @@ const ACTIVE_ASSIGNMENT: QueueAssignmentRecord = {
   question_template_id: 'question-1',
   judge_id: ACTIVE_JUDGE.id,
   prompt_fields: ['questionText', 'answer'],
-  attachment_forwarding: false,
+  attachment_forwarding: true,
   created_at: '2026-03-28T12:00:00.000Z',
   judge: {
     id: ACTIVE_JUDGE.id,
@@ -103,15 +106,20 @@ function createProps(
     expandedQuestionId: 'question-1',
     onToggleExpanded: () => undefined,
     getFields: () => ['questionText', 'answer', 'questionType'],
-    onToggleAssignment: () => undefined,
+    onToggleAssignmentPresence: () => undefined,
+    onUpdateAttachmentForwarding: () => undefined,
     onPromptFieldsChange: () => undefined,
     togglePending: false,
     ...overrides,
   };
 }
 
+afterEach(() => {
+  globalThis.fetch = originalFetch;
+});
+
 describe('AssignmentMatrixContent', () => {
-  it('renders the shared reviewer-table surface while keeping warning and inactive-assignment context visible', () => {
+  it('renders the shared reviewer-table surface while keeping warning, inactive-assignment, and forwarding context visible', () => {
     const html = renderToStaticMarkup(
       <AssignmentMatrixContent
         {...createProps({
@@ -122,7 +130,9 @@ describe('AssignmentMatrixContent', () => {
 
     expect(html).toContain(`data-testid="${REVIEWER_TABLE_SURFACE_TEST_ID}"`);
     expect(html).toContain('data-overflow-surface="reviewer-table"');
-    expect(html).toContain('Assignments changed while refreshing. Showing the last confirmed persisted assignment state below.');
+    expect(html).toContain(
+      'Assignments changed while refreshing. Showing the last confirmed persisted assignment state below.'
+    );
     expect(html).toContain('1 persisted assignment now target inactive judges.');
     expect(html).toContain(QUESTIONS[0].question_text);
     expect(html).toContain(QUESTIONS[0].external_id ?? '');
@@ -133,8 +143,51 @@ describe('AssignmentMatrixContent', () => {
     expect(html).toContain('1 inactive excluded');
     expect(html).toContain('Excluded');
     expect(html).toContain('Persisted assignments for this question:');
+    expect(html).toContain('Attachment forwarding enabled');
+    expect(html).toContain('Attachment forwarding disabled');
+    expect(html).toContain('Forward stored attachments');
     expect(html).toContain('Prompt fields for newly checked active judges on this question:');
     expect(html).toContain('Question Type');
+  });
+
+  it('keeps the mutation error visible while preserving the last confirmed persisted state', () => {
+    const html = renderToStaticMarkup(
+      <AssignmentMatrixContent
+        {...createProps({
+          mutationError: new Error('Failed to save assignment.'),
+        })}
+      />
+    );
+
+    expect(html).toContain('Failed to save assignment.');
+    expect(html).toContain('Attachment forwarding enabled');
+    expect(html).toContain('Attachment forwarding disabled');
+    expect(html).toContain('Forward stored attachments');
+    expect(html).toContain(`data-testid="${REVIEWER_TABLE_SURFACE_TEST_ID}"`);
+  });
+
+  it('renders the empty persisted-assignment state for questions that do not have saved rows yet', () => {
+    const html = renderToStaticMarkup(
+      <AssignmentMatrixContent
+        {...createProps({
+          inactiveAssignmentCount: 0,
+          questions: [
+            {
+              ...QUESTIONS[0],
+              assignments: [],
+            },
+          ],
+          assignmentsByPair: new Map(),
+          visibleJudges: [ACTIVE_JUDGE],
+        })}
+      />
+    );
+
+    expect(html).toContain('No persisted assignments for this question yet.');
+    expect(html).toContain('0 persisted');
+    expect(html).toContain('Prompt fields for newly checked active judges on this question:');
+    expect(html).not.toContain('Attachment forwarding enabled');
+    expect(html).not.toContain('Attachment forwarding disabled');
   });
 
   it('keeps the fatal load error visible instead of rendering a hidden table surface', () => {
@@ -177,5 +230,47 @@ describe('AssignmentMatrixContent', () => {
     expect(html).toContain('role="progressbar"');
     expect(html).not.toContain(`data-testid="${REVIEWER_TABLE_SURFACE_TEST_ID}"`);
     expect(html).not.toContain('<table');
+  });
+});
+
+describe('fetchAssignments', () => {
+  it('rejects malformed persisted assignment payloads instead of guessing forwarding state', async () => {
+    globalThis.fetch = mock(
+      async () =>
+        new Response(
+          JSON.stringify([
+            {
+              id: 'assignment-1',
+              queue_id: 'queue-1',
+              question_template_id: 'question-1',
+              judge_id: 'judge-active',
+              prompt_fields: ['questionText', 'answer'],
+              attachment_forwarding: 'yes',
+              created_at: '2026-03-28T12:00:00.000Z',
+              judges: {
+                id: 'judge-active',
+                name: 'Judge Atlas',
+                model: 'gateway/model-a',
+                active: true,
+              },
+              question_templates: {
+                id: 'question-1',
+                external_id: 'Q-001',
+                question_text: 'Question text',
+                question_type: 'free_text',
+                created_at: '2026-03-28T12:00:00.000Z',
+              },
+            },
+          ]),
+          {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          }
+        )
+    ) as unknown as typeof fetch;
+
+    await expect(fetchAssignments('queue-1')).rejects.toThrow(
+      'Expected /api/queues/queue-1/assignments response[0].attachment_forwarding to be a boolean.'
+    );
   });
 });

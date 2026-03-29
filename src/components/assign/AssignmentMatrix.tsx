@@ -8,8 +8,10 @@ import {
   Chip,
   CircularProgress,
   Collapse,
+  FormControlLabel,
   Paper,
   Stack,
+  Switch,
   Table,
   TableBody,
   TableCell,
@@ -39,12 +41,23 @@ interface AssignmentMatrixProps {
   queueId: string;
 }
 
-type AssignmentToggleArgs = {
+type AssignmentPresenceToggleArgs = {
   questionId: string;
   judgeId: string;
   assigned: boolean;
   fields: string[];
 };
+
+type AssignmentForwardingUpdateArgs = {
+  questionId: string;
+  judgeId: string;
+  fields: string[];
+  attachmentForwarding: boolean;
+};
+
+type AssignmentMutationArgs =
+  | ({ action: 'toggle-presence' } & AssignmentPresenceToggleArgs)
+  | ({ action: 'update-forwarding' } & AssignmentForwardingUpdateArgs);
 
 export interface AssignmentMatrixContentProps {
   loading: boolean;
@@ -59,7 +72,8 @@ export interface AssignmentMatrixContentProps {
   expandedQuestionId: string | null;
   onToggleExpanded: (questionId: string) => void;
   getFields: (questionId: string) => string[];
-  onToggleAssignment: (args: AssignmentToggleArgs) => void;
+  onToggleAssignmentPresence: (args: AssignmentPresenceToggleArgs) => void;
+  onUpdateAttachmentForwarding: (args: AssignmentForwardingUpdateArgs) => void;
   onPromptFieldsChange: (questionId: string, fields: string[]) => void;
   togglePending: boolean;
 }
@@ -71,9 +85,17 @@ interface AssignmentMatrixTableProps {
   expandedQuestionId: string | null;
   onToggleExpanded: (questionId: string) => void;
   getFields: (questionId: string) => string[];
-  onToggleAssignment: (args: AssignmentToggleArgs) => void;
+  onToggleAssignmentPresence: (args: AssignmentPresenceToggleArgs) => void;
+  onUpdateAttachmentForwarding: (args: AssignmentForwardingUpdateArgs) => void;
   onPromptFieldsChange: (questionId: string, fields: string[]) => void;
   togglePending: boolean;
+}
+
+interface SavedAssignmentResponse {
+  question_template_id: string;
+  judge_id: string;
+  prompt_fields: string[];
+  attachment_forwarding: boolean;
 }
 
 function getAssignmentQuestionsQueryKey(queueId: string) {
@@ -85,6 +107,10 @@ const PROMPT_FIELD_LABELS: Record<string, string> = {
   answer: 'Answer',
   questionType: 'Question Type',
 };
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
 
 function getApiErrorMessage(payload: unknown, fallback: string) {
   if (typeof payload === 'object' && payload !== null) {
@@ -113,6 +139,43 @@ async function readResponseBody(response: Response, fallback: string) {
   }
 }
 
+function parseSavedAssignmentResponse(value: unknown): SavedAssignmentResponse {
+  if (!isRecord(value)) {
+    throw new Error('Failed to save assignment. The server returned malformed assignment data.');
+  }
+
+  const questionTemplateId = value.question_template_id;
+  const judgeId = value.judge_id;
+  const promptFields = value.prompt_fields;
+  const attachmentForwarding = value.attachment_forwarding;
+
+  if (typeof questionTemplateId !== 'string' || questionTemplateId.length === 0) {
+    throw new Error('Failed to save assignment. The server returned malformed assignment data.');
+  }
+
+  if (typeof judgeId !== 'string' || judgeId.length === 0) {
+    throw new Error('Failed to save assignment. The server returned malformed assignment data.');
+  }
+
+  if (
+    !Array.isArray(promptFields) ||
+    !promptFields.every((field) => typeof field === 'string' && field.length > 0)
+  ) {
+    throw new Error('Failed to save assignment. The server returned malformed assignment data.');
+  }
+
+  if (typeof attachmentForwarding !== 'boolean') {
+    throw new Error('Failed to save assignment. The server returned malformed assignment data.');
+  }
+
+  return {
+    question_template_id: questionTemplateId,
+    judge_id: judgeId,
+    prompt_fields: [...promptFields],
+    attachment_forwarding: attachmentForwarding,
+  };
+}
+
 async function fetchQuestions(queueId: string) {
   const response = await fetch(`/api/queues/${queueId}/questions`);
   const body = await readResponseBody(response, 'Failed to load queue questions.');
@@ -135,7 +198,7 @@ async function fetchJudges() {
   return parseJudgeList(body, '/api/judges response');
 }
 
-async function fetchAssignments(queueId: string) {
+export async function fetchAssignments(queueId: string) {
   const response = await fetch(`/api/queues/${queueId}/assignments`);
   const body = await readResponseBody(response, 'Failed to load queue assignments.');
 
@@ -149,12 +212,13 @@ async function fetchAssignments(queueId: string) {
   });
 }
 
-async function createAssignment(
+async function upsertAssignment(
   queueId: string,
   payload: {
     question_template_id: string;
     judge_id: string;
     prompt_fields: string[];
+    attachment_forwarding: boolean;
   }
 ) {
   const response = await fetch(`/api/queues/${queueId}/assignments`, {
@@ -168,7 +232,7 @@ async function createAssignment(
     throw new Error(getApiErrorMessage(body, 'Failed to save assignment.'));
   }
 
-  return body;
+  return parseSavedAssignmentResponse(body);
 }
 
 async function removeAssignment(
@@ -201,6 +265,12 @@ function formatPromptField(field: string) {
   return PROMPT_FIELD_LABELS[field] ?? field;
 }
 
+function formatForwardingState(attachmentForwarding: boolean) {
+  return attachmentForwarding
+    ? 'Attachment forwarding enabled'
+    : 'Attachment forwarding disabled';
+}
+
 export function AssignmentMatrixTable({
   questions,
   visibleJudges,
@@ -208,7 +278,8 @@ export function AssignmentMatrixTable({
   expandedQuestionId,
   onToggleExpanded,
   getFields,
-  onToggleAssignment,
+  onToggleAssignmentPresence,
+  onUpdateAttachmentForwarding,
   onPromptFieldsChange,
   togglePending,
 }: AssignmentMatrixTableProps) {
@@ -293,7 +364,7 @@ export function AssignmentMatrixTable({
                             <Checkbox
                               checked={assigned}
                               onChange={() =>
-                                onToggleAssignment({
+                                onToggleAssignmentPresence({
                                   questionId: question.id,
                                   judgeId: judge.id,
                                   assigned,
@@ -342,48 +413,84 @@ export function AssignmentMatrixTable({
                                     variant="outlined"
                                     sx={{ p: 1.5 }}
                                   >
-                                    <Stack
-                                      direction={{ xs: 'column', sm: 'row' }}
-                                      justifyContent="space-between"
-                                      spacing={1}
-                                    >
-                                      <Box>
-                                        <Typography fontSize={13} fontWeight={600}>
-                                          {assignment.judge.name}
-                                        </Typography>
-                                        <Typography variant="caption" color="text.secondary">
-                                          {assignment.judge.model}
-                                        </Typography>
-                                      </Box>
-                                      <Chip
-                                        size="small"
-                                        color={
-                                          assignment.judge_status === 'active'
-                                            ? 'success'
-                                            : 'default'
+                                    <Stack spacing={1.5}>
+                                      <Stack
+                                        direction={{ xs: 'column', sm: 'row' }}
+                                        justifyContent="space-between"
+                                        spacing={1}
+                                      >
+                                        <Box>
+                                          <Typography fontSize={13} fontWeight={600}>
+                                            {assignment.judge.name}
+                                          </Typography>
+                                          <Typography variant="caption" color="text.secondary">
+                                            {assignment.judge.model}
+                                          </Typography>
+                                        </Box>
+                                        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                                          <Chip
+                                            size="small"
+                                            color={
+                                              assignment.judge_status === 'active'
+                                                ? 'success'
+                                                : 'default'
+                                            }
+                                            label={
+                                              assignment.judge_status === 'active'
+                                                ? 'Active in preview/run'
+                                                : 'Inactive — excluded from preview/run'
+                                            }
+                                          />
+                                          <Chip
+                                            size="small"
+                                            color={
+                                              assignment.attachment_forwarding
+                                                ? 'primary'
+                                                : 'default'
+                                            }
+                                            variant={
+                                              assignment.attachment_forwarding
+                                                ? 'filled'
+                                                : 'outlined'
+                                            }
+                                            label={formatForwardingState(
+                                              assignment.attachment_forwarding
+                                            )}
+                                          />
+                                        </Stack>
+                                      </Stack>
+                                      <Stack
+                                        direction="row"
+                                        spacing={1}
+                                        flexWrap="wrap"
+                                        useFlexGap
+                                      >
+                                        {assignment.prompt_fields.map((field) => (
+                                          <Chip
+                                            key={field}
+                                            size="small"
+                                            variant="outlined"
+                                            label={formatPromptField(field)}
+                                          />
+                                        ))}
+                                      </Stack>
+                                      <FormControlLabel
+                                        control={
+                                          <Switch
+                                            checked={assignment.attachment_forwarding}
+                                            onChange={(_event, checked) =>
+                                              onUpdateAttachmentForwarding({
+                                                questionId: assignment.question_template_id,
+                                                judgeId: assignment.judge_id,
+                                                fields: assignment.prompt_fields,
+                                                attachmentForwarding: checked,
+                                              })
+                                            }
+                                            disabled={togglePending}
+                                          />
                                         }
-                                        label={
-                                          assignment.judge_status === 'active'
-                                            ? 'Active in preview/run'
-                                            : 'Inactive — excluded from preview/run'
-                                        }
+                                        label="Forward stored attachments"
                                       />
-                                    </Stack>
-                                    <Stack
-                                      direction="row"
-                                      spacing={1}
-                                      flexWrap="wrap"
-                                      useFlexGap
-                                      mt={1.5}
-                                    >
-                                      {assignment.prompt_fields.map((field) => (
-                                        <Chip
-                                          key={field}
-                                          size="small"
-                                          variant="outlined"
-                                          label={formatPromptField(field)}
-                                        />
-                                      ))}
                                     </Stack>
                                   </Paper>
                                 ))}
@@ -431,7 +538,8 @@ export function AssignmentMatrixContent({
   expandedQuestionId,
   onToggleExpanded,
   getFields,
-  onToggleAssignment,
+  onToggleAssignmentPresence,
+  onUpdateAttachmentForwarding,
   onPromptFieldsChange,
   togglePending,
 }: AssignmentMatrixContentProps) {
@@ -488,7 +596,8 @@ export function AssignmentMatrixContent({
         expandedQuestionId={expandedQuestionId}
         onToggleExpanded={onToggleExpanded}
         getFields={getFields}
-        onToggleAssignment={onToggleAssignment}
+        onToggleAssignmentPresence={onToggleAssignmentPresence}
+        onUpdateAttachmentForwarding={onUpdateAttachmentForwarding}
         onPromptFieldsChange={onPromptFieldsChange}
         togglePending={togglePending}
       />
@@ -531,25 +640,37 @@ export default function AssignmentMatrix({ queueId }: AssignmentMatrixProps) {
     queryFn: () => fetchAssignments(queueId),
   });
 
-  const toggleMutation = useMutation({
-    mutationFn: async ({ questionId, judgeId, assigned, fields }: AssignmentToggleArgs) => {
-      if (assigned) {
-        return removeAssignment(queueId, {
-          question_template_id: questionId,
-          judge_id: judgeId,
+  const assignmentMutation = useMutation({
+    mutationFn: async (args: AssignmentMutationArgs) => {
+      if (args.action === 'toggle-presence') {
+        if (args.assigned) {
+          return removeAssignment(queueId, {
+            question_template_id: args.questionId,
+            judge_id: args.judgeId,
+          });
+        }
+
+        return upsertAssignment(queueId, {
+          question_template_id: args.questionId,
+          judge_id: args.judgeId,
+          prompt_fields: args.fields,
+          attachment_forwarding: false,
         });
       }
 
-      return createAssignment(queueId, {
-        question_template_id: questionId,
-        judge_id: judgeId,
-        prompt_fields: fields,
+      return upsertAssignment(queueId, {
+        question_template_id: args.questionId,
+        judge_id: args.judgeId,
+        prompt_fields: args.fields,
+        attachment_forwarding: args.attachmentForwarding,
       });
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['assignments', queueId] });
-      qc.invalidateQueries({ queryKey: getAssignmentQuestionsQueryKey(queueId) });
-      qc.invalidateQueries({ queryKey: ['run-preview', queueId] });
+    onSettled: async () => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['assignments', queueId] }),
+        qc.invalidateQueries({ queryKey: getAssignmentQuestionsQueryKey(queueId) }),
+        qc.invalidateQueries({ queryKey: ['run-preview', queueId] }),
+      ]);
     },
   });
 
@@ -598,7 +719,7 @@ export default function AssignmentMatrix({ queueId }: AssignmentMatrixProps) {
       loadError={combinedLoadError}
       hasPersistedState={hasPersistedState}
       onRetryLoads={retryLoads}
-      mutationError={toggleMutation.error}
+      mutationError={assignmentMutation.error}
       inactiveAssignmentCount={inactiveAssignmentCount}
       questions={questions ?? []}
       visibleJudges={visibleJudges}
@@ -608,11 +729,16 @@ export default function AssignmentMatrix({ queueId }: AssignmentMatrixProps) {
         setExpanded((current) => (current === questionId ? null : questionId))
       }
       getFields={getFields}
-      onToggleAssignment={(args) => toggleMutation.mutate(args)}
+      onToggleAssignmentPresence={(args) =>
+        assignmentMutation.mutate({ action: 'toggle-presence', ...args })
+      }
+      onUpdateAttachmentForwarding={(args) =>
+        assignmentMutation.mutate({ action: 'update-forwarding', ...args })
+      }
       onPromptFieldsChange={(questionId, fields) =>
         setPromptFields((current) => ({ ...current, [questionId]: fields }))
       }
-      togglePending={toggleMutation.isPending}
+      togglePending={assignmentMutation.isPending}
     />
   );
 }
