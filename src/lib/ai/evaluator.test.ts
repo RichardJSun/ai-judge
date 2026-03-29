@@ -1,3 +1,4 @@
+import type { FilePart, ModelMessage, TextPart } from '@ai-sdk/provider-utils';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { APICallError, NoObjectGeneratedError } from 'ai';
 import { describe, expect, it } from 'bun:test';
@@ -47,13 +48,62 @@ function createAttachment(overrides: Partial<EvaluationAttachment> = {}): Evalua
   };
 }
 
-function createSupabaseMock(options: { failUpdateAt?: number; errorMessage?: string } = {}) {
+type StorageDownloadResponse = {
+  data?: { arrayBuffer(): Promise<ArrayBuffer> };
+  error?: unknown;
+};
+
+type StorageDownloadFn = (bucket: string, path: string) => Promise<StorageDownloadResponse>;
+
+function encodeUtf8(value: string): Uint8Array {
+  return new TextEncoder().encode(value);
+}
+
+function createStorageDownloadResponse(bytes: Uint8Array): StorageDownloadResponse {
+  const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+  return {
+    data: {
+      arrayBuffer: async () => buffer,
+    },
+    error: null,
+  };
+}
+
+function getUserMessageText(messages?: ModelMessage[]): string {
+  const userMessage = messages?.find((message) => message.role === 'user');
+  const textPart = getUserContent(userMessage).find((part): part is TextPart => part.type === 'text');
+  return textPart?.text ?? '';
+}
+
+function getUserFilePart(messages?: ModelMessage[]): FilePart | undefined {
+  const userMessage = messages?.find((message) => message.role === 'user');
+  return getUserContent(userMessage).find((part): part is FilePart => part.type === 'file');
+}
+
+function getUserContent(message?: ModelMessage): Array<TextPart | FilePart> {
+  if (!message) {
+    return [];
+  }
+
+  const rawContent =
+    typeof message.content === 'string'
+      ? [{ type: 'text', text: message.content }]
+      : message.content;
+
+  return rawContent.filter((part): part is TextPart | FilePart => part.type === 'text' || part.type === 'file');
+}
+
+function createSupabaseMock(options: { failUpdateAt?: number; errorMessage?: string; storageDownload?: StorageDownloadFn } = {}) {
   const updates: Array<{
     table: string;
     values: Record<string, unknown>;
     filters: Array<{ column: string; value: string }>;
   }> = [];
   let updateCount = 0;
+
+  const downloadAttachment =
+    options.storageDownload ??
+    (async () => ({ data: undefined, error: new Error('storage download not configured') }));
 
   const supabase = {
     from(table: string) {
@@ -77,6 +127,15 @@ function createSupabaseMock(options: { failUpdateAt?: number; errorMessage?: str
         },
       };
     },
+    storage: {
+      from(bucket: string) {
+        return {
+          download(path: string) {
+            return downloadAttachment(bucket, path);
+          },
+        };
+      },
+    },
   } as unknown as SupabaseClient;
 
   return { supabase, updates };
@@ -87,7 +146,7 @@ function createDeps(options: {
   generate?: EvaluateSingleDeps['generate'];
 } = {}) {
   const state = {
-    generateCalls: [] as Array<{ modelId: string; system: string; prompt: string }>,
+    generateCalls: [] as Array<{ modelId: string; system: string; messages?: ModelMessage[] }>,
     sleepCalls: [] as number[],
   };
   const nowValues = options.nowValues ?? [1000, 1150];
@@ -157,7 +216,15 @@ function createNoObjectGeneratedError(options: {
 describe('evaluateSingle', () => {
   for (const statusCode of [429, 502, 503]) {
     it(`retries transient provider status ${statusCode} and persists success audit fields`, async () => {
-      const { supabase, updates } = createSupabaseMock();
+      const downloadPayload = encodeUtf8('attachment-bytes');
+      const attachments = [createAttachment({ byteSize: downloadPayload.length })];
+      let downloadAttempts = 0;
+      const { supabase, updates } = createSupabaseMock({
+        storageDownload: async () => {
+          downloadAttempts += 1;
+          return createStorageDownloadResponse(downloadPayload);
+        },
+      });
       let attempts = 0;
       const { deps, state } = createDeps({
         nowValues: [1000, 1480],
@@ -169,7 +236,7 @@ describe('evaluateSingle', () => {
               message: `Provider failed with ${statusCode}`,
               statusCode,
               url: 'https://gateway.test',
-              requestBodyValues: { prompt: input.prompt },
+              requestBodyValues: { messages: input.messages },
             });
           }
 
@@ -181,14 +248,34 @@ describe('evaluateSingle', () => {
         },
       });
 
-      await evaluateSingle(supabase, createParams(), deps);
+      const params = createParams({
+        judge: {
+          id: 'judge-vision',
+          name: 'Judge Vision',
+          system_prompt: 'Be precise.',
+          model: 'gateway/multimodal-model',
+        },
+        attachmentForwarding: true,
+        attachments,
+      });
 
+      await evaluateSingle(supabase, params, deps);
+
+      expect(downloadAttempts).toBe(1);
       expect(attempts).toBe(3);
       expect(state.sleepCalls).toEqual([1000, 2000]);
+      expect(state.generateCalls).toHaveLength(3);
+      const userText = getUserMessageText(state.generateCalls[0]?.messages);
+      expect(userText).toContain('Question Type: short_text');
+      expect(userText).toContain('Answer:\nvalue: "A careful answer"');
+      const filePart = getUserFilePart(state.generateCalls[0]?.messages);
+      expect(filePart?.filename).toBe('blob.png');
+      expect(filePart?.mediaType).toBe('image/png');
+      expect(new TextDecoder().decode(filePart?.data as Uint8Array)).toBe('attachment-bytes');
       expect(updates).toHaveLength(2);
       expect(updates[0]?.values).toMatchObject({
         status: 'running',
-        model_used: 'gateway/model-a',
+        model_used: 'gateway/multimodal-model',
         retry_count: 0,
       });
       expect(updates[0]?.values.prompt_snapshot).toBeDefined();
@@ -197,7 +284,8 @@ describe('evaluateSingle', () => {
       expect(runningSnapshot).toContain('Question Type: short_text');
       expect(runningSnapshot).toContain('Answer:\nvalue: "A careful answer"');
       expect(runningSnapshot).toContain('[Attachments]');
-      expect(runningSnapshot).toContain('Plan: text-only');
+      expect(runningSnapshot).toContain('Plan: multimodal');
+      expect(runningSnapshot).toContain('Supported media: image/png, image/jpeg');
       expect(updates[1]?.values).toMatchObject({
         status: 'completed',
         verdict: 'pass',
@@ -211,6 +299,71 @@ describe('evaluateSingle', () => {
     });
   }
 
+  it('terminates with a truthful error when attachment download fails', async () => {
+    const attachments = [createAttachment({ byteSize: 0 })];
+    const { supabase, updates } = createSupabaseMock({
+      storageDownload: async () => ({ data: undefined, error: new Error('download failure') }),
+    });
+    const { deps, state } = createDeps();
+    const params = createParams({
+      judge: {
+        id: 'judge-vision',
+        name: 'Judge Vision',
+        system_prompt: 'Be precise.',
+        model: 'gateway/multimodal-model',
+      },
+      attachmentForwarding: true,
+      attachments,
+    });
+
+    await expect(evaluateSingle(supabase, params, deps)).rejects.toThrow('failed to download');
+
+    expect(state.generateCalls).toHaveLength(0);
+    expect(updates.at(-1)?.values).toMatchObject({
+      status: 'error',
+      model_used: 'gateway/multimodal-model',
+    });
+    expect(String(updates.at(-1)?.values.error_message)).toContain(
+      'failed to download from durable storage'
+    );
+  });
+
+  it('terminates with a truthful error when attachment blob is empty', async () => {
+    const attachments = [createAttachment({ byteSize: 0 })];
+    const { supabase, updates } = createSupabaseMock({
+      storageDownload: async () => ({
+        data: {
+          arrayBuffer: async () => new ArrayBuffer(0),
+        },
+        error: null,
+      }),
+    });
+    const { deps, state } = createDeps();
+    const params = createParams({
+      judge: {
+        id: 'judge-vision',
+        name: 'Judge Vision',
+        system_prompt: 'Be precise.',
+        model: 'gateway/multimodal-model',
+      },
+      attachmentForwarding: true,
+      attachments,
+    });
+
+    await expect(evaluateSingle(supabase, params, deps)).rejects.toThrow(
+      'storage object is empty'
+    );
+
+    expect(state.generateCalls).toHaveLength(0);
+    expect(updates.at(-1)?.values).toMatchObject({
+      status: 'error',
+      model_used: 'gateway/multimodal-model',
+    });
+    expect(String(updates.at(-1)?.values.error_message)).toContain(
+      'storage object is empty'
+    );
+  });
+
   it('retries status-less network failures and caps transient retry counts on terminal failure', async () => {
     const { supabase, updates } = createSupabaseMock();
     let attempts = 0;
@@ -222,7 +375,7 @@ describe('evaluateSingle', () => {
         throw new APICallError({
           message: 'Cannot connect to API: socket hang up',
           url: 'https://gateway.test',
-          requestBodyValues: { prompt: input.prompt },
+          requestBodyValues: { messages: input.messages },
           isRetryable: true,
         });
       },
@@ -261,7 +414,7 @@ describe('evaluateSingle', () => {
           throw new APICallError({
             message: 'Gateway request failed',
             url: 'https://gateway.test',
-            requestBodyValues: { prompt: input.prompt },
+            requestBodyValues: { messages: input.messages },
             cause: timeoutCause,
           });
         }
@@ -332,7 +485,7 @@ describe('evaluateSingle', () => {
           message: 'Gateway internal error',
           statusCode: 500,
           url: 'https://gateway.test',
-          requestBodyValues: { prompt: input.prompt },
+          requestBodyValues: { messages: input.messages },
           responseBody: '{"error":"upstream"}',
           isRetryable: true,
         });
@@ -363,7 +516,7 @@ describe('evaluateSingle', () => {
     );
 
     expect(state.generateCalls).toHaveLength(1);
-    expect(state.generateCalls[0]?.prompt).toContain('Answer:\nnull');
+    expect(getUserMessageText(state.generateCalls[0]?.messages)).toContain('Answer:\nnull');
     expect(updates.at(-1)?.values).toMatchObject({
       status: 'completed',
       verdict: 'pass',

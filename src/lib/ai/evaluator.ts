@@ -1,7 +1,9 @@
+import type { FilePart, ModelMessage, TextPart } from '@ai-sdk/provider-utils';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { AttachmentStorageStatusEnum } from '@/types/db';
 import { APICallError, generateText, NoObjectGeneratedError, Output } from 'ai';
 import { z } from 'zod';
+import { downloadSubmissionAttachment, type DownloadedSubmissionAttachment } from '@/lib/submissions/attachment-storage';
 import { gateway } from './gateway';
 
 const VerdictSchema = z.object({
@@ -193,7 +195,7 @@ export interface EvaluateSingleDeps {
   generate(input: {
     modelId: string;
     system: string;
-    prompt: string;
+    messages: ModelMessage[];
   }): Promise<{
     output: VerdictResult;
     response: { modelId?: string | null };
@@ -204,11 +206,11 @@ export interface EvaluateSingleDeps {
 const defaultEvaluateSingleDeps: EvaluateSingleDeps = {
   now: () => Date.now(),
   sleep,
-  async generate({ modelId, system, prompt }) {
+  async generate({ modelId, system, messages }) {
     const result = await generateText({
       model: gateway(modelId),
       system,
-      prompt,
+      messages,
       output: Output.object({ schema: VerdictSchema }),
     });
 
@@ -221,6 +223,10 @@ const defaultEvaluateSingleDeps: EvaluateSingleDeps = {
 };
 
 function buildPrompt(params: EvaluateParams): string {
+  return buildPromptTextSegments(params).join('\n\n');
+}
+
+function buildPromptTextSegments(params: EvaluateParams): string[] {
   const { questionText, questionType, answerJson, promptFields } = params;
   const parts: string[] = [];
 
@@ -234,7 +240,64 @@ function buildPrompt(params: EvaluateParams): string {
     parts.push(`Answer:\n${formatAnswer(answerJson)}`);
   }
 
-  return parts.join('\n\n');
+  return parts;
+}
+
+function buildUserMessage(
+  params: EvaluateParams,
+  plan: EvaluationPlanResult,
+  attachments: DownloadedSubmissionAttachment[]
+): ModelMessage {
+  const trimmedSegments = buildPromptTextSegments(params).filter((segment) => segment.trim() !== '');
+  const text = trimmedSegments.length > 0 ? trimmedSegments.join('\n\n') : ' ';
+  const content: Array<TextPart | FilePart> = [{ type: 'text', text }];
+
+  if (plan.kind === 'multimodal') {
+    for (const attachment of attachments) {
+      content.push(buildAttachmentFilePart(attachment));
+    }
+  }
+
+  return {
+    role: 'user',
+    content,
+  };
+}
+
+function buildAttachmentFilePart(attachment: DownloadedSubmissionAttachment): FilePart {
+  return {
+    type: 'file',
+    data: attachment.bytes,
+    filename: attachment.fileName,
+    mediaType: attachment.mediaType,
+  };
+}
+
+async function downloadAttachmentsForEvaluation(
+  supabase: SupabaseClient,
+  attachments: EvaluationAttachment[]
+): Promise<DownloadedSubmissionAttachment[]> {
+  const downloaded: DownloadedSubmissionAttachment[] = [];
+
+  for (const attachment of attachments) {
+    if (attachment.storageStatus !== 'stored') {
+      continue;
+    }
+
+    const downloadedAttachment = await downloadSubmissionAttachment(supabase, {
+      attachmentId: attachment.id,
+      externalAttachmentId: attachment.externalAttachmentId,
+      storageBucket: attachment.storageBucket,
+      storagePath: attachment.storagePath,
+      byteSize: attachment.byteSize,
+      fileName: attachment.fileName,
+      mediaType: attachment.mediaType,
+    });
+
+    downloaded.push(downloadedAttachment);
+  }
+
+  return downloaded;
 }
 
 function formatAnswer(answerJson: unknown): string {
@@ -311,6 +374,33 @@ export async function evaluateSingle(
     throw new EvaluationPlanError(blockedReason);
   }
 
+  let downloadedAttachments: DownloadedSubmissionAttachment[] = [];
+  if (plan.kind === 'multimodal') {
+    try {
+      downloadedAttachments = await downloadAttachmentsForEvaluation(supabase, params.attachments);
+    } catch (error) {
+      await updateEvaluation(
+        supabase,
+        evaluationId,
+        buildAuditPatch({
+          status: 'error',
+          promptSnapshot,
+          modelUsed: judge.model,
+          retryCount,
+          errorMessage: formatErrorMessage(error),
+          latencyMs: deps.now() - startedAt,
+          tokensUsed: null,
+          verdict: null,
+          reasoning: null,
+        })
+      );
+
+      throw asError(error);
+    }
+  }
+
+  const messages = [buildUserMessage(params, plan, downloadedAttachments)];
+
   while (true) {
     let result: Awaited<ReturnType<EvaluateSingleDeps['generate']>>;
 
@@ -318,7 +408,7 @@ export async function evaluateSingle(
       result = await deps.generate({
         modelId: judge.model,
         system: judge.system_prompt,
-        prompt,
+        messages,
       });
     } catch (error) {
       lastTokensUsed = extractTokensUsed(error) ?? lastTokensUsed;

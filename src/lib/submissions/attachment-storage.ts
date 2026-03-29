@@ -29,6 +29,24 @@ export interface UploadedSubmissionAttachmentObject {
   fullPath: string;
 }
 
+export interface DownloadSubmissionAttachmentInput {
+  attachmentId: string;
+  externalAttachmentId: string;
+  storageBucket: string;
+  storagePath: string;
+  byteSize: number;
+  fileName: string;
+  mediaType: string;
+}
+
+export interface DownloadedSubmissionAttachment {
+  attachmentId: string;
+  externalAttachmentId: string;
+  fileName: string;
+  mediaType: string;
+  bytes: Uint8Array;
+}
+
 export class SubmissionAttachmentStorageError extends Error {
   readonly attachmentId: string;
   readonly bucket: string;
@@ -143,6 +161,108 @@ export async function uploadSubmissionAttachment(
     path: result.data.path,
     fullPath,
   };
+}
+
+export async function downloadSubmissionAttachment(
+  supabase: SupabaseClient,
+  input: DownloadSubmissionAttachmentInput
+): Promise<DownloadedSubmissionAttachment> {
+  const { storageBucket: bucket, storagePath: path } = input;
+  const downloadResult = await supabase.storage.from(bucket).download(path);
+  const { data, error } = downloadResult ?? {};
+
+  if (error) {
+    throw new SubmissionAttachmentStorageError({
+      attachmentId: input.attachmentId,
+      bucket,
+      path,
+      detail: getStorageErrorMessage(error),
+      message: `Attachment ${input.externalAttachmentId} failed to download from durable storage.`,
+      status: getStorageStatusCode(error),
+    });
+  }
+
+  if (!data) {
+    throw new SubmissionAttachmentStorageError({
+      attachmentId: input.attachmentId,
+      bucket,
+      path,
+      detail: 'Supabase Storage returned no blob data during download.',
+      message: `Attachment ${input.externalAttachmentId} storage object could not be retrieved.`,
+      status: 500,
+    });
+  }
+
+  const bytes = await resolveBlobBytes(data);
+
+  if (bytes.length === 0) {
+    throw new SubmissionAttachmentStorageError({
+      attachmentId: input.attachmentId,
+      bucket,
+      path,
+      detail: 'Downloaded attachment blob is empty.',
+      message: `Attachment ${input.externalAttachmentId} storage object is empty.`,
+      status: 500,
+    });
+  }
+
+  if (input.byteSize > 0 && bytes.length !== input.byteSize) {
+    throw new SubmissionAttachmentStorageError({
+      attachmentId: input.attachmentId,
+      bucket,
+      path,
+      detail: `Downloaded blob size ${bytes.length} does not match expected ${input.byteSize}.`,
+      message: `Attachment ${input.externalAttachmentId} storage object size mismatch.`,
+      status: 500,
+    });
+  }
+
+  return {
+    attachmentId: input.attachmentId,
+    externalAttachmentId: input.externalAttachmentId,
+    fileName: input.fileName,
+    mediaType: input.mediaType,
+    bytes,
+  };
+}
+
+async function resolveBlobBytes(data: { arrayBuffer(): Promise<ArrayBuffer> }) {
+  const buffer = await data.arrayBuffer();
+  return new Uint8Array(buffer);
+}
+
+function getStorageStatusCode(error: unknown): number {
+  if (typeof error === 'object' && error !== null) {
+    const status = (error as { status?: number | string }).status;
+    if (typeof status === 'number') {
+      return status;
+    }
+    if (typeof status === 'string' && !Number.isNaN(Number(status))) {
+      return Number(status);
+    }
+
+    const statusCode = (error as { statusCode?: number | string }).statusCode;
+    if (typeof statusCode === 'number') {
+      return statusCode;
+    }
+    if (typeof statusCode === 'string' && !Number.isNaN(Number(statusCode))) {
+      return Number(statusCode);
+    }
+  }
+
+  return 500;
+}
+
+function getStorageErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  if (typeof error === 'string') {
+    return error;
+  }
+
+  return 'Storage download failed.';
 }
 
 async function raceWithAbort<T>(promise: Promise<T>, signal: AbortSignal | undefined, createAbortError: () => Error) {
