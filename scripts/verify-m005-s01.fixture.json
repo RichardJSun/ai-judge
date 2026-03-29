@@ -21,13 +21,13 @@
     },
     "attachments": [
       {
-        "id": "attachment_m005_s01_proof_txt",
-        "fileName": "attachment-proof-m005-s01.txt",
-        "mediaType": "text/plain",
-        "byteSize": 31,
+        "id": "attachment_m005_s01_proof_png",
+        "fileName": "attachment-proof-m005-s01.png",
+        "mediaType": "image/png",
+        "byteSize": 70,
         "source": {
           "kind": "inline_base64",
-          "base64": "UHJvb2YgYXR0YWNobWVudCBmb3IgTTAwNSBTMDEuCg=="
+          "base64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PmJb9wAAAABJRU5ErkJggg=="
         }
       }
     ]

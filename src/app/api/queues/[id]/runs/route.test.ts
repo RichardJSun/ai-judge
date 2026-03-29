@@ -153,4 +153,31 @@ describe('handlePostRun', () => {
     expect(await response.json()).toEqual({ error: 'Malformed attachment metadata.' });
     expect(scheduled).toBe(false);
   });
+
+  it('marks the run errored when dispatch fails before execution', async () => {
+    let markRunErrorCalled = false;
+    let markedRunId: string | undefined;
+
+    const deps = {
+      createServiceClient: () => new FakeSupabaseClient() as never,
+      startRun: async (startDeps: StartRunDeps) => {
+        startDeps.markRunError = async (runId) => {
+          markRunErrorCalled = true;
+          markedRunId = runId;
+        };
+        return { runId: 'run-error', total: 0, tasks: [] };
+      },
+      scheduleRunExecution: async (options) => {
+        await options.onScheduleError?.();
+        throw new Error('Dispatch failed to schedule.');
+      },
+    } as const;
+
+    const response = await handlePostRun(createRequest(), { params: Promise.resolve({ id: 'queue-1' }) }, deps);
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({ error: 'Failed to dispatch evaluation run.' });
+    expect(markRunErrorCalled).toBe(true);
+    expect(markedRunId).toBe('run-error');
+  });
 });
