@@ -1,17 +1,6 @@
-export interface RunExecutionTask {
-  evaluationId: string;
-  submissionId: string;
-  questionText: string;
-  questionType: string | null;
-  answerJson: Record<string, unknown>;
-  judge: {
-    id: string;
-    name: string;
-    system_prompt: string;
-    model: string;
-  };
-  promptFields: string[];
-}
+import type { EvaluateParams } from '@/lib/ai/evaluator';
+
+export type RunExecutionTask = EvaluateParams;
 
 export interface ExecuteRunDeps {
   evaluate(task: RunExecutionTask): Promise<void>;

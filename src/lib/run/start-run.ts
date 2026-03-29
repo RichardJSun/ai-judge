@@ -1,4 +1,5 @@
-import type { EvaluateParams } from '@/lib/ai/evaluator';
+import type { EvaluateParams, EvaluationAttachment } from '@/lib/ai/evaluator';
+import type { AttachmentStorageStatusEnum } from '@/types/db';
 
 const DEFAULT_PROMPT_FIELDS = ['questionText', 'answer'] as const;
 
@@ -18,6 +19,7 @@ export interface RunAssignment {
   questionTemplateId: string;
   judgeId: string;
   promptFields: string[];
+  attachmentForwarding: boolean;
   judge: {
     id: string;
     name: string;
@@ -65,6 +67,7 @@ export interface StartRunDeps {
   getAssignments(queueId: string): Promise<unknown[]>;
   getSubmissions(queueId: string): Promise<unknown[]>;
   getAnswers(submissionIds: string[]): Promise<unknown[]>;
+  getSubmissionAttachments(submissionIds: string[]): Promise<unknown[]>;
   createRun(input: { queueId: string; total: number }): Promise<RunInsert>;
   insertEvaluations(rows: EvaluationInsert[]): Promise<unknown[]>;
   markRunError(runId: string): Promise<void>;
@@ -133,9 +136,15 @@ export async function startRun(deps: StartRunDeps, queueId: string): Promise<Sta
   }
 
   const total = drafts.length;
+  const submissionIds = submissions.map((submission) => submission.id);
   const run = await deps.createRun({ queueId, total });
 
   try {
+    const attachmentsRaw = submissionIds.length
+      ? await deps.getSubmissionAttachments(submissionIds)
+      : [];
+    const attachmentsBySubmission = buildAttachmentManifest(attachmentsRaw, submissions);
+
     const persistedRows = total
       ? (await deps.insertEvaluations(
           drafts.map((draft) => ({
@@ -161,6 +170,8 @@ export async function startRun(deps: StartRunDeps, queueId: string): Promise<Sta
         });
       }
 
+      const taskAttachments = attachmentsBySubmission.get(row.submissionId) ?? [];
+
       return {
         evaluationId: row.id,
         submissionId: row.submissionId,
@@ -169,6 +180,8 @@ export async function startRun(deps: StartRunDeps, queueId: string): Promise<Sta
         answerJson: draft.answerJson,
         judge: draft.assignment.judge,
         promptFields: draft.assignment.promptFields,
+        attachmentForwarding: draft.assignment.attachmentForwarding,
+        attachments: taskAttachments,
       } satisfies EvaluateParams;
     });
 
@@ -207,6 +220,7 @@ function normalizeAssignment(row: unknown): RunAssignment {
     questionTemplateId: asString(record.question_template_id, 'assignment.question_template_id'),
     judgeId: asString(record.judge_id, 'assignment.judge_id'),
     promptFields: normalizePromptFields(record.prompt_fields),
+    attachmentForwarding: asBoolean(record.attachment_forwarding, 'assignment.attachment_forwarding'),
     judge: {
       id: asString(judge.id, 'judge.id'),
       name: asString(judge.name, 'judge.name'),
@@ -325,4 +339,141 @@ function asNullableString(value: unknown, label: string): string | null {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function asBoolean(value: unknown, label: string): boolean {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+
+  throw new StartRunError(`Expected ${label} to be a boolean.`, {
+    status: 500,
+    publicMessage: `Malformed ${label} returned from storage.`,
+  });
+}
+
+function asPositiveInteger(value: unknown, label: string): number {
+  if (typeof value === 'number' && Number.isInteger(value) && value > 0) {
+    return value;
+  }
+
+  throw new StartRunError(`Expected ${label} to be a positive integer.`, {
+    status: 500,
+    publicMessage: `Malformed ${label} returned from storage.`,
+  });
+}
+
+function asAttachmentStorageStatus(value: unknown, label: string): AttachmentStorageStatusEnum {
+  if (value === 'stored' || value === 'unavailable' || value === 'error') {
+    return value;
+  }
+
+  throw new StartRunError(`Expected ${label} to be one of stored, unavailable, or error.`, {
+    status: 500,
+    publicMessage: `Malformed ${label} returned from storage.`,
+  });
+}
+
+type InternalAttachmentRow = EvaluationAttachment & { createdAt: string };
+
+function buildAttachmentManifest(
+  rows: unknown[],
+  submissions: RunSubmission[]
+): Map<string, EvaluationAttachment[]> {
+  const validSubmissionIds = new Set(submissions.map((submission) => submission.id));
+  const attachmentsBySubmission = new Map<string, InternalAttachmentRow[]>();
+  const seenIds = new Map<string, Set<string>>();
+  const seenExternalIds = new Map<string, Set<string>>();
+
+  for (const row of rows) {
+    const attachment = normalizeAttachmentRow(row, validSubmissionIds);
+    const idsForSubmission = seenIds.get(attachment.submissionId) ?? new Set<string>();
+    if (idsForSubmission.has(attachment.id)) {
+      throw new StartRunError(
+        `Submission ${attachment.submissionId} returned duplicate attachment ids for ${attachment.id}.`,
+        {
+          status: 500,
+          publicMessage: 'Malformed submission attachment metadata returned from storage.',
+        }
+      );
+    }
+    idsForSubmission.add(attachment.id);
+    seenIds.set(attachment.submissionId, idsForSubmission);
+
+    const externalIdsForSubmission = seenExternalIds.get(attachment.submissionId) ?? new Set<string>();
+    if (externalIdsForSubmission.has(attachment.externalAttachmentId)) {
+      throw new StartRunError(
+        `Submission ${attachment.submissionId} returned duplicate external attachment ids for ${attachment.externalAttachmentId}.`,
+        {
+          status: 500,
+          publicMessage: 'Malformed submission attachment metadata returned from storage.',
+        }
+      );
+    }
+    externalIdsForSubmission.add(attachment.externalAttachmentId);
+    seenExternalIds.set(attachment.submissionId, externalIdsForSubmission);
+
+    const attachments = attachmentsBySubmission.get(attachment.submissionId) ?? [];
+    attachments.push(attachment);
+    attachmentsBySubmission.set(attachment.submissionId, attachments);
+  }
+
+  const finalized = new Map<string, EvaluationAttachment[]>();
+  for (const [submissionId, attachmentRows] of attachmentsBySubmission.entries()) {
+    attachmentRows.sort((left, right) =>
+      left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id)
+    );
+    finalized.set(
+      submissionId,
+      attachmentRows.map(({ createdAt, ...rest }) => rest)
+    );
+  }
+
+  return finalized;
+}
+
+function normalizeAttachmentRow(row: unknown, validSubmissionIds: Set<string>): InternalAttachmentRow {
+  const record = asRecord(row, 'submission attachment');
+  const attachmentId = asString(record.id, 'submission_attachment.id');
+  const submissionId = asString(record.submission_id, 'submission_attachment.submission_id');
+
+  if (!validSubmissionIds.has(submissionId)) {
+    throw new StartRunError(
+      `Submission attachment ${attachmentId} belongs to submission ${submissionId}, which is not part of this run.`,
+      {
+        status: 500,
+        publicMessage: 'Malformed submission attachment relation returned from storage.',
+      }
+    );
+  }
+
+  const storageStatus = asAttachmentStorageStatus(record.storage_status, 'submission_attachment.storage_status');
+  const storageError = asNullableString(record.storage_error, 'submission_attachment.storage_error');
+  if (storageStatus === 'stored' && storageError) {
+    throw new StartRunError(
+      `Submission attachment ${attachmentId} reported storage_status stored with a storage_error.`,
+      {
+        status: 500,
+        publicMessage: 'Malformed submission attachment metadata returned from storage.',
+      }
+    );
+  }
+
+  return {
+    id: attachmentId,
+    submissionId,
+    externalAttachmentId: asString(
+      record.external_attachment_id,
+      'submission_attachment.external_attachment_id'
+    ),
+    sourceKind: asString(record.source_kind, 'submission_attachment.source_kind'),
+    fileName: asString(record.file_name, 'submission_attachment.file_name'),
+    mediaType: asString(record.media_type, 'submission_attachment.media_type'),
+    byteSize: asPositiveInteger(record.byte_size, 'submission_attachment.byte_size'),
+    storageBucket: asString(record.storage_bucket, 'submission_attachment.storage_bucket'),
+    storagePath: asString(record.storage_path, 'submission_attachment.storage_path'),
+    storageStatus,
+    storageError,
+    createdAt: asString(record.created_at, 'submission_attachment.created_at'),
+  };
 }

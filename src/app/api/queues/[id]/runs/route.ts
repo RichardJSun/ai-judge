@@ -9,12 +9,25 @@ import { executeRun, type ExecuteRunDeps } from '@/lib/run/execute-run';
 import { scheduleRunExecution, startRun, StartRunError, type StartRunDeps } from '@/lib/run/start-run';
 import { after, NextRequest, NextResponse } from 'next/server';
 
-export async function POST(
+type RunsRouteDeps = {
+  createServiceClient: typeof createServiceClient;
+  startRun: typeof startRun;
+  scheduleRunExecution: typeof scheduleRunExecution;
+};
+
+const defaultDeps: RunsRouteDeps = {
+  createServiceClient,
+  startRun,
+  scheduleRunExecution,
+};
+
+export async function handlePostRun(
   _request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
+  deps: RunsRouteDeps = defaultDeps
 ) {
   const { id } = await params;
-  const supabase = createServiceClient();
+  const supabase = deps.createServiceClient();
   const startDeps: StartRunDeps = {
     async getAssignments(queueId) {
       const { data, error } = await supabase
@@ -52,6 +65,7 @@ export async function POST(
           question_template_id: assignment.question_template_id,
           judge_id: assignment.judge_id,
           prompt_fields: assignment.prompt_fields,
+          attachment_forwarding: assignment.attachment_forwarding,
           judges: {
             id: assignment.judge.id,
             name: assignment.judge.name,
@@ -100,6 +114,28 @@ export async function POST(
 
       if (error) {
         throw new StartRunError(error.message, { status: 500, publicMessage: error.message, cause: error });
+      }
+
+      return data ?? [];
+    },
+    async getSubmissionAttachments(submissionIds) {
+      if (!submissionIds.length) {
+        return [];
+      }
+
+      const { data, error } = await supabase
+        .from('submission_attachments')
+        .select(
+          'id, submission_id, external_attachment_id, source_kind, file_name, media_type, byte_size, storage_bucket, storage_path, storage_status, storage_error, created_at'
+        )
+        .in('submission_id', submissionIds);
+
+      if (error) {
+        throw new StartRunError('Failed to load submission attachments.', {
+          status: 500,
+          publicMessage: 'Failed to load submission attachments.',
+          cause: error,
+        });
       }
 
       return data ?? [];
@@ -200,10 +236,10 @@ export async function POST(
   };
 
   try {
-    const started = await startRun(startDeps, id);
+    const started = await deps.startRun(startDeps, id);
 
     try {
-      await scheduleRunExecution({
+      await deps.scheduleRunExecution({
         schedule: after,
         execute: () => executeRun({ runId: started.runId, tasks: started.tasks, deps: executeDeps }),
         onScheduleError: () => startDeps.markRunError(started.runId),
@@ -219,4 +255,11 @@ export async function POST(
     const status = error instanceof StartRunError ? error.status : 500;
     return NextResponse.json({ error: message }, { status });
   }
+}
+
+export async function POST(
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
+  return handlePostRun(request, context);
 }

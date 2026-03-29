@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { AttachmentStorageStatusEnum } from '@/types/db';
 import { APICallError, generateText, NoObjectGeneratedError, Output } from 'ai';
 import { z } from 'zod';
 import { gateway } from './gateway';
@@ -34,6 +35,20 @@ type EvaluationAuditPatch = {
   reasoning: string | null;
 };
 
+export interface EvaluationAttachment {
+  id: string;
+  submissionId: string;
+  externalAttachmentId: string;
+  sourceKind: string;
+  fileName: string;
+  mediaType: string;
+  byteSize: number;
+  storageBucket: string;
+  storagePath: string;
+  storageStatus: AttachmentStorageStatusEnum;
+  storageError: string | null;
+}
+
 export interface EvaluateParams {
   evaluationId: string;
   submissionId: string;
@@ -42,6 +57,8 @@ export interface EvaluateParams {
   answerJson: Record<string, unknown>;
   judge: { id: string; name: string; system_prompt: string; model: string };
   promptFields: string[];
+  attachmentForwarding: boolean;
+  attachments: EvaluationAttachment[];
 }
 
 export interface EvaluateSingleDeps {

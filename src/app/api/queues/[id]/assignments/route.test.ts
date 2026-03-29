@@ -1,3 +1,4 @@
+import type { NextRequest } from 'next/server';
 import { describe, expect, it } from 'bun:test';
 import { handleGetAssignments, handlePostAssignments } from './route';
 import { handleGetQuestions } from '../questions/route';
@@ -41,7 +42,10 @@ class FakeQuery<T> implements PromiseLike<QueryResult<T>> {
     return this;
   }
 
-  then(onFulfilled?: (value: QueryResult<T>) => unknown, onRejected?: (reason: unknown) => unknown) {
+  then<TResult1 = QueryResult<T>, TResult2 = never>(
+    onFulfilled?: ((value: QueryResult<T>) => TResult1 | PromiseLike<TResult1>) | null,
+    onRejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null
+  ): PromiseLike<TResult1 | TResult2> {
     const promise = Promise.resolve().then(() => this.executor(this));
     return promise.then(onFulfilled ?? undefined, onRejected ?? undefined);
   }
@@ -108,16 +112,16 @@ function createQuestionClient(forwarding: boolean) {
   }) as never;
 }
 
-function createGetRequest() {
-  return new Request('http://localhost/api/queues/queue-uuid-1/assignments');
+function createGetRequest(): NextRequest {
+  return new Request('http://localhost/api/queues/queue-uuid-1/assignments') as NextRequest;
 }
 
-function createPostRequest(body: Record<string, unknown>) {
+function createPostRequest(body: Record<string, unknown>): NextRequest {
   return new Request('http://localhost/api/queues/queue-uuid-1/assignments', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
-  });
+  }) as NextRequest;
 }
 
 describe('handleGetAssignments', () => {

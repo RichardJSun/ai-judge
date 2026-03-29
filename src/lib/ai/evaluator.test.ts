@@ -17,6 +17,8 @@ function createParams(overrides: Partial<EvaluateParams> = {}): EvaluateParams {
       model: 'gateway/model-a',
     },
     promptFields: ['questionType', 'questionText', 'answer'],
+    attachmentForwarding: false,
+    attachments: [],
     ...overrides,
   };
 }

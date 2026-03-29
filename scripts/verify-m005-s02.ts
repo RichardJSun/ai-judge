@@ -27,6 +27,7 @@ type PhaseRefs = {
   queueLabel?: string;
   questionId?: string;
   questionExternalId?: string;
+  submissionExternalId?: string;
   judgeId?: string;
   assignmentId?: string;
   detailUrl?: string;

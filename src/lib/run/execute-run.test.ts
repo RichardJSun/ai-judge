@@ -15,6 +15,8 @@ function createTask(overrides: Partial<RunExecutionTask> = {}): RunExecutionTask
       model: 'gateway/model-a',
     },
     promptFields: ['questionText', 'answer'],
+    attachmentForwarding: false,
+    attachments: [],
     ...overrides,
   };
 }
