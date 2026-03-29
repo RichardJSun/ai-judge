@@ -17,7 +17,8 @@
     "verify:m004-s03": "bun run scripts/verify-m004-s03.ts",
     "verify:m005-s01": "bun run scripts/verify-m005-s01.ts",
     "verify:m005-s02": "bun run scripts/verify-m005-s02.ts",
-    "verify:m005-s03": "bun run scripts/verify-m005-s03.ts"
+    "verify:m005-s03": "bun run scripts/verify-m005-s03.ts",
+    "verify:supabase": "bun run scripts/verify-supabase.ts"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",

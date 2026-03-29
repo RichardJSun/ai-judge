@@ -2,8 +2,9 @@ import { parseArgs } from 'node:util';
 import { ensureLocalAppReady } from './verify-m004-s01';
 import { loadFixture } from './verify-s02-live';
 import { selectProofSubmission } from './verify-m005-s01';
-import { DEFAULT_PROMPT_FIELDS } from '../src/lib/assignments/queue-assignment-state';
+import { DEFAULT_PROMPT_FIELDS, parseQueueAssignmentList } from '../src/lib/assignments/queue-assignment-state';
 import { parsePlanMarker } from '../src/lib/ai/plan-marker';
+import { parseJudgeList, parseJudgeRecord } from '../src/lib/judges/judge-lifecycle';
 import { SUBMISSION_ATTACHMENT_STORAGE_BUCKET } from '../src/lib/submissions/attachment-storage';
 import {
   assertStorageBucketReady,
@@ -82,6 +83,7 @@ type PhaseRefs = {
   questionExternalId?: string;
   runId?: string;
   judgeId?: string;
+  evaluationId?: string;
   scenario?: ScenarioName;
   endpoint?: string;
   bucket?: string;
@@ -103,14 +105,14 @@ const SCENARIO_BLUEPRINTS: ScenarioBlueprint[] = [
   {
     name: 'text-only',
     judgeSuffix: 'text-only',
-    model: 'verifier/m005-s03-text',
+    model: 'openai/gpt-oss-120b',
     forwarding: false,
     expectedPlan: 'text-only',
   },
   {
     name: 'multimodal',
     judgeSuffix: 'multimodal',
-    model: 'gateway/multimodal-model',
+    model: 'openai/gpt-4o-mini',
     forwarding: true,
     expectedPlan: 'multimodal',
     modelEnv: 'S03_VERIFY_MODEL',
@@ -118,7 +120,7 @@ const SCENARIO_BLUEPRINTS: ScenarioBlueprint[] = [
   {
     name: 'blocked',
     judgeSuffix: 'blocked-model',
-    model: 'openai/gpt-4o-mini',
+    model: 'openai/gpt-oss-120b',
     forwarding: true,
     expectedPlan: 'blocked',
   },
@@ -174,6 +176,7 @@ export function ensureGatewayEnvConfigured() {
 }
 
 const RESULTS_PAGE_SIZE = 25;
+const VERIFIER_JUDGE_PREFIXES = ['verify:m005-s02 ', 'verify:m005-s03 '] as const;
 
 class VerifierPhaseError extends Error {
   readonly phase: PhaseName;
@@ -471,6 +474,139 @@ async function fetchQuestionId(baseUrl: string, queueId: string, questionExterna
   return id;
 }
 
+async function fetchJudges(baseUrl: string, timeoutMs: number, fetchImpl: FetchLike) {
+  const payload = await readJsonResponse<unknown>(
+    fetchImpl,
+    `${baseUrl}/api/judges`,
+    'Judge list',
+    'judge-setup',
+    { endpoint: '/api/judges' },
+    timeoutMs
+  );
+
+  return parseJudgeList(payload, '/api/judges response');
+}
+
+async function patchJudgeActive(
+  baseUrl: string,
+  judgeId: string,
+  active: boolean,
+  timeoutMs: number,
+  fetchImpl: FetchLike
+) {
+  const payload = await readJsonResponse<unknown>(
+    fetchImpl,
+    `${baseUrl}/api/judges/${judgeId}`,
+    active ? 'Reactivate judge' : 'Deactivate judge',
+    'judge-setup',
+    { endpoint: `/api/judges/${judgeId}`, judgeId },
+    timeoutMs,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ active }),
+    }
+  );
+
+  return parseJudgeRecord(payload, `PATCH /api/judges/${judgeId} response`);
+}
+
+async function fetchAssignments(
+  baseUrl: string,
+  queueId: string,
+  timeoutMs: number,
+  fetchImpl: FetchLike
+) {
+  const payload = await readJsonResponse<unknown>(
+    fetchImpl,
+    `${baseUrl}/api/queues/${queueId}/assignments`,
+    'Queue assignments',
+    'assignment-setup',
+    { queueId, endpoint: `/api/queues/${queueId}/assignments` },
+    timeoutMs
+  );
+
+  return parseQueueAssignmentList(payload, {
+    context: `/api/queues/${queueId}/assignments response`,
+    requireQuestion: true,
+  });
+}
+
+function isVerifierJudgeName(name: string) {
+  return VERIFIER_JUDGE_PREFIXES.some((prefix) => name.startsWith(prefix));
+}
+
+async function deactivatePriorVerifierJudges(
+  baseUrl: string,
+  timeoutMs: number,
+  fetchImpl: FetchLike
+) {
+  const judges = await fetchJudges(baseUrl, timeoutMs, fetchImpl);
+  let deactivatedCount = 0;
+
+  for (const judge of judges) {
+    if (!judge.active || !isVerifierJudgeName(judge.name)) {
+      continue;
+    }
+
+    await patchJudgeActive(baseUrl, judge.id, false, timeoutMs, fetchImpl);
+    deactivatedCount += 1;
+  }
+
+  if (deactivatedCount > 0) {
+    log(`Deactivated ${deactivatedCount} prior M005 verifier judge(s) before the current proof run.`);
+  }
+}
+
+async function clearPriorVerifierAssignments(
+  baseUrl: string,
+  queueId: string,
+  timeoutMs: number,
+  fetchImpl: FetchLike
+) {
+  const assignments = await fetchAssignments(baseUrl, queueId, timeoutMs, fetchImpl);
+  const verifierAssignments = assignments.filter((assignment) => isVerifierJudgeName(assignment.judge.name));
+
+  for (const assignment of verifierAssignments) {
+    await deleteAssignment(
+      baseUrl,
+      queueId,
+      assignment.question_template_id,
+      assignment.judge_id,
+      timeoutMs,
+      fetchImpl
+    );
+  }
+
+  if (verifierAssignments.length > 0) {
+    log(`Cleared ${verifierAssignments.length} prior M005 verifier assignment row(s) before the current proof run.`);
+  }
+}
+
+async function assertNoForeignActiveAssignments(
+  baseUrl: string,
+  queueId: string,
+  timeoutMs: number,
+  fetchImpl: FetchLike
+) {
+  const assignments = await fetchAssignments(baseUrl, queueId, timeoutMs, fetchImpl);
+  const foreignActiveAssignment = assignments.find(
+    (assignment) => assignment.judge_status === 'active' && !isVerifierJudgeName(assignment.judge.name)
+  );
+
+  if (foreignActiveAssignment) {
+    throw new VerifierPhaseError(
+      'assignment-setup',
+      `Verifier queue already has an active non-verifier assignment for judge ${foreignActiveAssignment.judge_id}.`,
+      {
+        queueId,
+        questionId: foreignActiveAssignment.question_template_id,
+        judgeId: foreignActiveAssignment.judge_id,
+      }
+    );
+  }
+}
+
 async function createJudge(
   baseUrl: string,
   name: string,
@@ -503,7 +639,7 @@ async function createJudge(
 
   return {
     id: payload.id,
-    name: payload.name,
+    name: typeof payload.name === 'string' && payload.name.length > 0 ? payload.name : name,
   };
 }
 
@@ -608,12 +744,17 @@ async function fetchResults(
   baseUrl: string,
   queueId: string,
   questionId: string,
+  judgeIds: string[],
+  page: number,
   timeoutMs: number,
   fetchImpl: FetchLike
 ): Promise<ResultsResponse> {
   const url = new URL(`${baseUrl}/api/queues/${queueId}/results`);
   url.searchParams.set('questionId', questionId);
-  url.searchParams.set('page', '1');
+  for (const judgeId of judgeIds) {
+    url.searchParams.append('judgeId', judgeId);
+  }
+  url.searchParams.set('page', String(page));
   url.searchParams.set('pageSize', RESULTS_PAGE_SIZE.toString());
 
   return readJsonResponse<ResultsResponse>(
@@ -661,46 +802,68 @@ export async function pollForScenarios(
   const pending = new Set<ScenarioName>(scenarioMap.keys());
   const latest = new Map<ScenarioName, ScenarioResult>();
   const lastState: Partial<Record<ScenarioName, ScenarioResult>> = {};
+  const judgeIds = [...new Set(Array.from(scenarioMap.values(), (info) => info.judgeId))];
 
   while (Date.now() < deadline) {
-    const results = await fetchResults(baseUrlFromOptions(options), queueId, questionId, timeoutMs, fetchImpl);
-    for (const evaluation of results.evaluations) {
-      const scenarioEntry = [...scenarioMap.entries()].find(([, info]) => info.judgeId === evaluation.judge.id);
-      if (!scenarioEntry) continue;
+    let page = 1;
+    let totalPages = 1;
 
-      const [scenario, info] = scenarioEntry;
-      if (evaluation.submission.external_id !== submissionExternalId) continue;
-      if (evaluation.question.id !== questionId) continue;
+    while (page <= totalPages) {
+      const results = await fetchResults(baseUrlFromOptions(options), queueId, questionId, judgeIds, page, timeoutMs, fetchImpl);
+      totalPages = Math.max(1, Math.ceil(results.total / results.pageSize));
 
-      const promptSnapshot = evaluation.prompt_snapshot;
-      if (!promptSnapshot) {
-        lastState[scenario] = {
+      for (const evaluation of results.evaluations) {
+        const scenarioEntry = [...scenarioMap.entries()].find(([, info]) => info.judgeId === evaluation.judge.id);
+        if (!scenarioEntry) continue;
+
+        const [scenario, info] = scenarioEntry;
+        if (evaluation.submission.external_id !== submissionExternalId) continue;
+        if (evaluation.question.id !== questionId) continue;
+
+        if (evaluation.status !== 'completed' && evaluation.status !== 'error') {
+          lastState[scenario] = {
+            scenario,
+            evaluationId: evaluation.id,
+            judgeId: info.judgeId,
+            judgeName: info.judgeName,
+            status: evaluation.status,
+            promptSnapshot: '',
+            modelUsed: evaluation.model_used ?? '',
+            errorMessage: evaluation.error_message ?? null,
+          };
+          continue;
+        }
+
+        const promptSnapshot = evaluation.prompt_snapshot;
+        if (!promptSnapshot) {
+          throw new VerifierPhaseError(
+            'results-poll',
+            `Evaluation ${evaluation.id} missing prompt_snapshot.`,
+            { ...refs, scenario, evaluationId: evaluation.id }
+          );
+        }
+
+        const result: ScenarioResult = {
           scenario,
           evaluationId: evaluation.id,
           judgeId: info.judgeId,
           judgeName: info.judgeName,
           status: evaluation.status,
-          promptSnapshot: '',
+          promptSnapshot,
           modelUsed: evaluation.model_used ?? '',
-          errorMessage: evaluation.error_message ?? null,
+          errorMessage: evaluation.error_message,
         };
-        continue;
+
+        latest.set(scenario, result);
+        lastState[scenario] = result;
+        pending.delete(scenario);
       }
 
-      const result: ScenarioResult = {
-        scenario,
-        evaluationId: evaluation.id,
-        judgeId: info.judgeId,
-        judgeName: info.judgeName,
-        status: evaluation.status,
-        promptSnapshot,
-        modelUsed: evaluation.model_used ?? '',
-        errorMessage: evaluation.error_message,
-      };
+      if (pending.size === 0) {
+        break;
+      }
 
-      latest.set(scenario, result);
-      lastState[scenario] = result;
-      pending.delete(scenario);
+      page += 1;
     }
 
     if (pending.size === 0) {
@@ -831,6 +994,18 @@ export async function runLiveVerification(options: VerifierOptions, fetchImpl: F
       fetchSubmissionId(options.baseUrl, queueRow.id, proofTarget.submissionExternalId, options.timeoutMs, fetchImpl)
     );
 
+    await runPhase('judge-setup', { queueId: queueRow.id, queueLabel }, () =>
+      deactivatePriorVerifierJudges(options.baseUrl, options.timeoutMs, fetchImpl)
+    );
+
+    await runPhase('assignment-setup', { queueId: queueRow.id, queueLabel }, () =>
+      clearPriorVerifierAssignments(options.baseUrl, queueRow.id, options.timeoutMs, fetchImpl)
+    );
+
+    await runPhase('assignment-setup', { queueId: queueRow.id, queueLabel }, () =>
+      assertNoForeignActiveAssignments(options.baseUrl, queueRow.id, options.timeoutMs, fetchImpl)
+    );
+
     const scenarioMap = new Map<ScenarioName, { judgeId: string; judgeName: string }>();
 
     for (const config of scenarioConfigs) {
@@ -906,7 +1081,8 @@ export async function runLiveVerification(options: VerifierOptions, fetchImpl: F
   }
 }
 
-export { runPhase, formatVerifierSummary, LiveVerificationSummary, ScenarioResult, VerifierPhaseError };
+export { runPhase, formatVerifierSummary, VerifierPhaseError };
+export type { LiveVerificationSummary, ScenarioName, ScenarioResult };
 
 const isDirectRun = /(^|\/)verify-m005-s03\.ts$/.test(process.argv[1] ?? '');
 

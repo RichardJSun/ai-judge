@@ -104,7 +104,7 @@ describe('formatVerifierSummary', () => {
         status: 'completed',
         promptSnapshot:
           'Forwarding requested: no\nPlan: text-only\nPlan marker: {"version":1,"kind":"text-only","forwardingRequested":false}',
-        modelUsed: 'verifier/m005-s03-text',
+        modelUsed: 'openai/gpt-oss-120b',
         errorMessage: null,
       },
       {
@@ -115,7 +115,7 @@ describe('formatVerifierSummary', () => {
         status: 'completed',
         promptSnapshot:
           'Forwarding requested: yes\nPlan: multimodal\nPlan marker: {"version":1,"kind":"multimodal","forwardingRequested":true,"supportedMedia":["image/png","image/jpeg"]}',
-        modelUsed: 'gateway/multimodal-model',
+        modelUsed: 'openai/gpt-4o-mini',
         errorMessage: null,
       },
       {
@@ -126,7 +126,7 @@ describe('formatVerifierSummary', () => {
         status: 'error',
         promptSnapshot:
           'Forwarding requested: yes\nPlan: blocked\nPlan marker: {"version":1,"kind":"blocked","forwardingRequested":true,"blockedReason":"Model not configured"}',
-        modelUsed: 'openai/gpt-4o-mini',
+        modelUsed: 'openai/gpt-oss-120b',
         errorMessage: 'Model not configured',
       },
     ];
@@ -154,6 +154,142 @@ describe('formatVerifierSummary', () => {
 });
 
 describe('pollForScenarios', () => {
+  it('finds the tracked scenarios across paginated queue results', async () => {
+    const options = {
+      baseUrl: 'http://localhost:3000',
+      fixturePath: 'scripts/verify-m005-s01.fixture.json',
+      timeoutMs: 1000,
+      pollMs: 10,
+    };
+
+    const scenarioConfigs = buildScenarioConfigs();
+    const scenarioMap = new Map<ScenarioName, { judgeId: string; judgeName: string }>([
+      ['text-only', { judgeId: 'judge-text', judgeName: 'Text Judge' }],
+      ['multimodal', { judgeId: 'judge-multi', judgeName: 'Multimodal Judge' }],
+      ['blocked', { judgeId: 'judge-blocked', judgeName: 'Blocked Judge' }],
+    ]);
+
+    const unrelatedEvaluations: ResultsEvaluation[] = Array.from({ length: 25 }, (_, index) => ({
+      id: `unrelated-${index + 1}`,
+      verdict: 'pass',
+      reasoning: 'ok',
+      prompt_snapshot:
+        'Forwarding requested: no\nPlan: text-only\nPlan marker: {"version":1,"kind":"text-only","forwardingRequested":false}',
+      model_used: 'openai/gpt-4o-mini',
+      tokens_used: 0,
+      latency_ms: 0,
+      retry_count: 0,
+      error_message: null,
+      created_at: '2024-01-01T00:00:00.000Z',
+      status: 'completed',
+      submission: { id: `submission-${index + 1}`, external_id: `submission-ext-${index + 1}` },
+      question: { id: 'question-1', external_id: 'question-ext-1', question_text: 'Sample' },
+      judge: { id: `judge-unrelated-${index + 1}`, name: `Unrelated Judge ${index + 1}`, model: 'openai/gpt-4o-mini' },
+    }));
+
+    const trackedEvaluations: ResultsEvaluation[] = [
+      {
+        id: 'eval-text',
+        verdict: 'pass',
+        reasoning: 'ok',
+        prompt_snapshot:
+          'Forwarding requested: no\nPlan: text-only\nPlan marker: {"version":1,"kind":"text-only","forwardingRequested":false}',
+        model_used: 'openai/gpt-oss-120b',
+        tokens_used: 0,
+        latency_ms: 0,
+        retry_count: 0,
+        error_message: null,
+        created_at: '2024-01-01T00:00:01.000Z',
+        status: 'completed',
+        submission: { id: 'submission-1', external_id: 'submission-ext-1' },
+        question: { id: 'question-1', external_id: 'question-ext-1', question_text: 'Sample' },
+        judge: { id: 'judge-text', name: 'Text Judge', model: 'openai/gpt-oss-120b' },
+      },
+      {
+        id: 'eval-multi',
+        verdict: 'pass',
+        reasoning: 'ok',
+        prompt_snapshot:
+          'Forwarding requested: yes\nPlan: multimodal\nPlan marker: {"version":1,"kind":"multimodal","forwardingRequested":true,"supportedMedia":["image/png","image/jpeg"]}',
+        model_used: 'openai/gpt-4o-mini',
+        tokens_used: 0,
+        latency_ms: 0,
+        retry_count: 0,
+        error_message: null,
+        created_at: '2024-01-01T00:00:01.000Z',
+        status: 'completed',
+        submission: { id: 'submission-1', external_id: 'submission-ext-1' },
+        question: { id: 'question-1', external_id: 'question-ext-1', question_text: 'Sample' },
+        judge: { id: 'judge-multi', name: 'Multimodal Judge', model: 'openai/gpt-4o-mini' },
+      },
+      {
+        id: 'eval-blocked',
+        verdict: null,
+        reasoning: null,
+        prompt_snapshot:
+          'Forwarding requested: yes\nPlan: blocked\nPlan marker: {"version":1,"kind":"blocked","forwardingRequested":true,"blockedReason":"forwarding disabled"}',
+        model_used: 'openai/gpt-oss-120b',
+        tokens_used: 0,
+        latency_ms: 0,
+        retry_count: 0,
+        error_message: 'forwarding disabled',
+        created_at: '2024-01-01T00:00:01.000Z',
+        status: 'error',
+        submission: { id: 'submission-1', external_id: 'submission-ext-1' },
+        question: { id: 'question-1', external_id: 'question-ext-1', question_text: 'Sample' },
+        judge: { id: 'judge-blocked', name: 'Blocked Judge', model: 'openai/gpt-oss-120b' },
+      },
+    ];
+
+    const pageOne = {
+      evaluations: unrelatedEvaluations,
+      total: 28,
+      passRate: 100,
+      judgePassRates: [],
+      page: 1,
+      pageSize: 25,
+    };
+
+    const pageTwo = {
+      evaluations: trackedEvaluations,
+      total: 28,
+      passRate: 100,
+      judgePassRates: [],
+      page: 2,
+      pageSize: 25,
+    };
+
+    const fetchImpl = (((input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? new URL(input) : new URL(input.toString());
+      const page = url.searchParams.get('page');
+      const payload = page === '2' ? pageTwo : pageOne;
+
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve(payload),
+      } as Response);
+    }) as unknown) as typeof fetch;
+
+    await expect(
+      pollForScenarios(
+        options,
+        'queue-1',
+        'question-1',
+        'submission-ext-1',
+        scenarioMap,
+        scenarioConfigs,
+        2000,
+        fetchImpl,
+        { queueId: 'queue-1', runId: 'run-1', questionId: 'question-1', submissionExternalId: 'submission-ext-1' }
+      )
+    ).resolves.toMatchObject([
+      { scenario: 'text-only', evaluationId: 'eval-text', status: 'completed' },
+      { scenario: 'multimodal', evaluationId: 'eval-multi', status: 'completed' },
+      { scenario: 'blocked', evaluationId: 'eval-blocked', status: 'error' },
+    ]);
+  });
+
   it('throws when an evaluation is missing prompt_snapshot', async () => {
     const options = {
       baseUrl: 'http://localhost:3000',
@@ -172,7 +308,7 @@ describe('pollForScenarios', () => {
       verdict: 'pass',
       reasoning: 'ok',
       prompt_snapshot: null,
-      model_used: 'verifier/m005-s03-text',
+      model_used: 'openai/gpt-oss-120b',
       tokens_used: 0,
       latency_ms: 0,
       retry_count: 0,
@@ -181,7 +317,7 @@ describe('pollForScenarios', () => {
       status: 'completed',
       submission: { id: 'submission-1', external_id: 'submission-ext-1' },
       question: { id: 'question-1', external_id: 'question-ext-1', question_text: 'Sample' },
-      judge: { id: 'judge-text', name: 'Text Judge', model: 'verifier/m005-s03-text' },
+      judge: { id: 'judge-text', name: 'Text Judge', model: 'openai/gpt-oss-120b' },
     };
 
     const payload = {
@@ -193,12 +329,12 @@ describe('pollForScenarios', () => {
       pageSize: 25,
     };
 
-    const fetchImpl = () =>
+    const fetchImpl = ((() =>
       Promise.resolve({
         ok: true,
         status: 200,
         json: () => Promise.resolve(payload),
-      } as Response);
+      } as Response)) as unknown) as typeof fetch;
 
     await expect(
       pollForScenarios(

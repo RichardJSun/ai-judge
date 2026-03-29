@@ -1,4 +1,4 @@
-import type { FilePart, ModelMessage, TextPart } from '@ai-sdk/provider-utils';
+import type { FilePart, ImagePart, ModelMessage, TextPart } from '@ai-sdk/provider-utils';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { AttachmentStorageStatusEnum } from '@/types/db';
 import { APICallError, generateText, NoObjectGeneratedError, Output } from 'ai';
@@ -267,11 +267,11 @@ function buildUserMessage(
 ): ModelMessage {
   const trimmedSegments = buildPromptTextSegments(params).filter((segment) => segment.trim() !== '');
   const text = trimmedSegments.length > 0 ? trimmedSegments.join('\n\n') : ' ';
-  const content: Array<TextPart | FilePart> = [{ type: 'text', text }];
+  const content: Array<TextPart | ImagePart | FilePart> = [{ type: 'text', text }];
 
   if (plan.kind === 'multimodal') {
     for (const attachment of attachments) {
-      content.push(buildAttachmentFilePart(attachment));
+      content.push(buildAttachmentContentPart(attachment));
     }
   }
 
@@ -281,7 +281,15 @@ function buildUserMessage(
   };
 }
 
-function buildAttachmentFilePart(attachment: DownloadedSubmissionAttachment): FilePart {
+function buildAttachmentContentPart(attachment: DownloadedSubmissionAttachment): ImagePart | FilePart {
+  if (attachment.mediaType.startsWith('image/')) {
+    return {
+      type: 'image',
+      image: attachment.bytes,
+      mediaType: attachment.mediaType,
+    };
+  }
+
   return {
     type: 'file',
     data: attachment.bytes,
@@ -292,7 +300,7 @@ function buildAttachmentFilePart(attachment: DownloadedSubmissionAttachment): Fi
 
 async function downloadAttachmentsForEvaluation(
   supabase: SupabaseClient,
-  attachments: EvaluationAttachment[]
+  attachments: readonly EvaluationAttachment[]
 ): Promise<DownloadedSubmissionAttachment[]> {
   const downloaded: DownloadedSubmissionAttachment[] = [];
 

@@ -51,7 +51,7 @@ Notes:
 - `SUPABASE_SECRET_KEY` is the preferred server-side key name used by the app and live verifiers. `SUPABASE_SERVICE_ROLE_KEY` is also accepted as a fallback.
 - `AI_GATEWAY_BASE_URL` is an override knob. Keep the default Vercel AI Gateway URL unless you intentionally route through a different compatible endpoint.
 - `AI_GATEWAY_API_KEY` is required for real judge execution.
-- `S03_VERIFY_MODEL` is optional and only affects the S03 live verifier. If unset, it uses `openai/gpt-4o-mini`.
+- `S03_VERIFY_MODEL` is optional and affects the attachment-capable S03/S04 verifier lanes. If unset, those lanes use `openai/gpt-4o-mini`, while the S03 text-only lane uses `openai/gpt-oss-120b`.
 
 ## Local Setup
 
@@ -111,6 +111,7 @@ All four commands require a reachable Next.js app at `--base-url`. If you do not
 ### Required prerequisites
 - Apply `supabase/migrations/0002_submission_attachments.sql` to every Supabase instance the verifier targets. The S04 proof reads the extra columns/tables before it can claim attachment persistence, so a missing migration stops the verifier during schema readiness. Run `bunx supabase db push` or paste the SQL into the Supabase SQL editor for the project named in your env vars.
 - Make sure the private storage bucket `submission-attachments` exists and is writable. Local Supabase users can run `bunx supabase storage list --bucket submission-attachments` to confirm. If it is missing, recreate it with `bunx supabase storage create-bucket submission-attachments` (or the equivalent Supabase UI action) before rerunning the verifier.
+- Run `bun run verify:supabase` before the upload/run proofs so the readiness phases report the required tables and bucket up front instead of failing mid-proof. This command uses the same `bunx supabase status -o env` output that the verifiers rely on and strips optional quotes before matching the values stored in `.env.local`.
 - Set the env vars that the verifier scripts expect:
   - `NEXT_PUBLIC_SUPABASE_URL` (or rely on `bunx supabase status -o env` output for the local stack).
   - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` (branch compatibility for the reviewer UI).

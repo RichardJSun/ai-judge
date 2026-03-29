@@ -1,4 +1,4 @@
-import type { FilePart, ModelMessage, TextPart } from '@ai-sdk/provider-utils';
+import type { FilePart, ImagePart, ModelMessage, TextPart } from '@ai-sdk/provider-utils';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { APICallError, NoObjectGeneratedError } from 'ai';
 import { describe, expect, it } from 'bun:test';
@@ -76,12 +76,17 @@ function getUserMessageText(messages?: ModelMessage[]): string {
   return textPart?.text ?? '';
 }
 
+function getUserImagePart(messages?: ModelMessage[]): ImagePart | undefined {
+  const userMessage = messages?.find((message) => message.role === 'user');
+  return getUserContent(userMessage).find((part): part is ImagePart => part.type === 'image');
+}
+
 function getUserFilePart(messages?: ModelMessage[]): FilePart | undefined {
   const userMessage = messages?.find((message) => message.role === 'user');
   return getUserContent(userMessage).find((part): part is FilePart => part.type === 'file');
 }
 
-function getUserContent(message?: ModelMessage): Array<TextPart | FilePart> {
+function getUserContent(message?: ModelMessage): Array<TextPart | ImagePart | FilePart> {
   if (!message) {
     return [];
   }
@@ -91,7 +96,9 @@ function getUserContent(message?: ModelMessage): Array<TextPart | FilePart> {
       ? [{ type: 'text', text: message.content }]
       : message.content;
 
-  return rawContent.filter((part): part is TextPart | FilePart => part.type === 'text' || part.type === 'file');
+  return rawContent.filter((part): part is TextPart | ImagePart | FilePart =>
+    part.type === 'text' || part.type === 'image' || part.type === 'file'
+  );
 }
 
 function createSupabaseMock(options: { failUpdateAt?: number; errorMessage?: string; storageDownload?: StorageDownloadFn } = {}) {
@@ -269,10 +276,9 @@ describe('evaluateSingle', () => {
       const userText = getUserMessageText(state.generateCalls[0]?.messages);
       expect(userText).toContain('Question Type: short_text');
       expect(userText).toContain('Answer:\nvalue: "A careful answer"');
-      const filePart = getUserFilePart(state.generateCalls[0]?.messages);
-      expect(filePart?.filename).toBe('blob.png');
-      expect(filePart?.mediaType).toBe('image/png');
-      expect(new TextDecoder().decode(filePart?.data as Uint8Array)).toBe('attachment-bytes');
+      const imagePart = getUserImagePart(state.generateCalls[0]?.messages);
+      expect(imagePart?.mediaType).toBe('image/png');
+      expect(new TextDecoder().decode(imagePart?.image as Uint8Array)).toBe('attachment-bytes');
       expect(updates).toHaveLength(2);
       expect(updates[0]?.values).toMatchObject({
         status: 'running',

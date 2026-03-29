@@ -102,7 +102,7 @@ function createSummary(overrides: Partial<LiveVerificationSummary> = {}): LiveVe
         evaluationId: 'eval-text-1',
         status: 'completed',
         verdict: 'pass',
-        modelUsed: 'gateway/text-only-model',
+        modelUsed: 'openai/gpt-4o-mini',
         promptSnapshot: 'Forwarding requested: no\nPlan: text-only\nPlan marker: {"version":1,"kind":"text-only","forwardingRequested":false}',
         errorMessage: null,
       },
@@ -111,7 +111,7 @@ function createSummary(overrides: Partial<LiveVerificationSummary> = {}): LiveVe
         evaluationId: 'eval-multi-1',
         status: 'completed',
         verdict: 'pass',
-        modelUsed: 'gateway/multimodal-model',
+        modelUsed: 'openai/gpt-4o-mini',
         promptSnapshot: 'Forwarding requested: yes\nPlan: multimodal\nPlan marker: {"version":1,"kind":"multimodal","forwardingRequested":true,"supportedMedia":["image/png","image/jpeg"]}',
         errorMessage: null,
       },
@@ -120,7 +120,7 @@ function createSummary(overrides: Partial<LiveVerificationSummary> = {}): LiveVe
         evaluationId: 'eval-blocked-1',
         status: 'error',
         verdict: null,
-        modelUsed: 'gateway/multimodal-model',
+        modelUsed: 'openai/gpt-4o-mini',
         promptSnapshot: 'Forwarding requested: yes\nPlan: blocked\nPlan marker: {"version":1,"kind":"blocked","forwardingRequested":true,"blockedReason":"forwarding disabled"}',
         errorMessage: 'forwarding disabled',
       },
@@ -260,7 +260,7 @@ describe('summary helpers', () => {
     expect(parsePlanMarker(summary.scenarioProof[2].promptSnapshot).kind).toBe('blocked');
 
     expect(formatSetupSummary(summary)).toBe(
-      'queue=queue-uuid-1 queueLabel=queue_s04_live_proof validJudge=judge-valid-uuid-1 invalidJudge=judge-invalid-uuid-1 questions=question-uuid-1:assignment-valid-q1:assignment-invalid-q1:3,question-uuid-2:assignment-valid-q2:none:3 previews=0/6/0/6 inactiveAssignments=2 run=run-uuid-1:completed:9/9:6/3/3 verdictFilter=pass results=9/6/3 submission=submission-uuid-1:submission-ext-1 detailUrl=http://localhost:3000/queues/queue-uuid-1/submissions/submission-uuid-1?source=results detailApiUrl=http://localhost:3000/api/queues/queue-uuid-1/submissions/submission-uuid-1 attachments=attachment-uuid-1:screenshot.png:stored forwarding=question-uuid-1:assignment-valid-q1:forward,question-uuid-2:assignment-valid-q2:no-forward scenarios=text-only:eval-text-1:completed:gateway/text-only-model,multimodal:eval-multi-1:completed:gateway/multimodal-model,blocked:eval-blocked-1:error:gateway/multimodal-model:forwarding disabled'
+      'queue=queue-uuid-1 queueLabel=queue_s04_live_proof validJudge=judge-valid-uuid-1 invalidJudge=judge-invalid-uuid-1 questions=question-uuid-1:assignment-valid-q1:assignment-invalid-q1:3,question-uuid-2:assignment-valid-q2:none:3 previews=0/6/0/6 inactiveAssignments=2 run=run-uuid-1:completed:9/9:6/3/3 verdictFilter=pass results=9/6/3 submission=submission-uuid-1:submission-ext-1 detailUrl=http://localhost:3000/queues/queue-uuid-1/submissions/submission-uuid-1?source=results detailApiUrl=http://localhost:3000/api/queues/queue-uuid-1/submissions/submission-uuid-1 attachments=attachment-uuid-1:screenshot.png:stored forwarding=question-uuid-1:assignment-valid-q1:forward,question-uuid-2:assignment-valid-q2:no-forward scenarios=text-only:eval-text-1:completed:openai/gpt-4o-mini,multimodal:eval-multi-1:completed:openai/gpt-4o-mini,blocked:eval-blocked-1:error:openai/gpt-4o-mini:forwarding disabled'
     );
   });
 
@@ -311,7 +311,7 @@ describe('buildScenarioProofEntries', () => {
         verdict: 'pass',
         reasoning: 'ok',
         prompt_snapshot: 'Plan marker: not-json',
-        model_used: 'gateway/text-only-model',
+        model_used: 'openai/gpt-4o-mini',
         tokens_used: 0,
         latency_ms: 0,
         retry_count: 0,
@@ -320,7 +320,7 @@ describe('buildScenarioProofEntries', () => {
         status: 'completed',
         submission: { id: 'submission-1', external_id: 'submission-ext-1' },
         question: { id: 'question-1', external_id: 'q-template-1', question_text: 'Text' },
-        judge: { id: 'judge-1', name: 'Judge One', model: 'gateway/text-only-model' },
+        judge: { id: 'judge-1', name: 'Judge One', model: 'openai/gpt-4o-mini' },
       },
     ];
 

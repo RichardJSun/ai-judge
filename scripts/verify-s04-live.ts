@@ -439,7 +439,7 @@ export function ensureAiGatewayConfigured() {
 export function resolveValidMultimodalModel() {
   const override = process.env.S04_VERIFY_MODEL ?? process.env.S03_VERIFY_MODEL;
   if (override === undefined) {
-    return 'gateway/multimodal-model';
+    return 'openai/gpt-4o-mini';
   }
 
   const trimmed = override.trim();
@@ -2150,6 +2150,71 @@ export function buildScenarioProofEntries(input: {
   });
 }
 
+function buildScenarioProofEntriesFromAudit(input: {
+  evaluations: EvaluationAuditRow[];
+  refs: PhaseRefs;
+}): ScenarioProofEntry[] {
+  return SCENARIO_NAMES.map((scenario) => {
+    const matches = input.evaluations.filter((row) => {
+      const snapshot = row.prompt_snapshot;
+      if (!snapshot) {
+        return false;
+      }
+
+      try {
+        return parsePlanMarker(snapshot).kind === scenario;
+      } catch {
+        return false;
+      }
+    });
+
+    if (matches.length === 0) {
+      const malformed = input.evaluations.find((row) => {
+        const snapshot = row.prompt_snapshot;
+        if (!snapshot) {
+          return false;
+        }
+
+        try {
+          parsePlanMarker(snapshot);
+          return false;
+        } catch {
+          return true;
+        }
+      });
+
+      if (malformed) {
+        throw new VerifierPhaseError(
+          'results-assertions',
+          `Scenario classification is impossible because evaluation ${malformed.id} has a malformed plan marker.`,
+          input.refs
+        );
+      }
+
+      throw new VerifierPhaseError('results-assertions', `Evaluation log did not include a ${scenario} scenario.`, input.refs);
+    }
+
+    const evaluation = matches[0];
+    if (!evaluation.prompt_snapshot) {
+      throw new VerifierPhaseError(
+        'results-assertions',
+        `Scenario classification is impossible because evaluation ${evaluation.id} is missing prompt_snapshot.`,
+        input.refs
+      );
+    }
+
+    return {
+      scenario,
+      evaluationId: evaluation.id,
+      status: evaluation.status,
+      verdict: evaluation.verdict ?? null,
+      modelUsed: evaluation.model_used ?? 'unknown',
+      promptSnapshot: evaluation.prompt_snapshot,
+      errorMessage: evaluation.error_message ?? null,
+    };
+  });
+}
+
 function assertPageContains(body: string, expectedText: string, page: string) {
   if (!body.includes(expectedText)) {
     throw new Error(`Page ${page} did not include expected text ${JSON.stringify(expectedText)}.`);
@@ -2497,8 +2562,8 @@ export async function runLiveVerification(
       filter: resultsQueryString,
     },
     async () =>
-      buildScenarioProofEntries({
-        evaluations: resultsProof.evaluations,
+      buildScenarioProofEntriesFromAudit({
+        evaluations: persistedAudit.evaluations,
         refs: {
           queueId: persistedTarget.queue.id,
           queueLabel: persistedTarget.queue.queue_id,
