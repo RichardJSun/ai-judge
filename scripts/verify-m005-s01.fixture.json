@@ -1,0 +1,35 @@
+[
+  {
+    "id": "sub_m005_s01_attachment_proof",
+    "queueId": "queue_m005_s01_attachment_proof",
+    "labelingTaskId": "task_m005_s01_attachment_proof",
+    "createdAt": 1711843200000,
+    "questions": [
+      {
+        "rev": 1,
+        "data": {
+          "id": "q_template_m005_s01_attachment_proof",
+          "questionType": "short_text",
+          "questionText": "What evidence was attached to this submission?"
+        }
+      }
+    ],
+    "answers": {
+      "q_template_m005_s01_attachment_proof": {
+        "value": "The proof submission includes one deterministic text attachment."
+      }
+    },
+    "attachments": [
+      {
+        "id": "attachment_m005_s01_proof_txt",
+        "fileName": "attachment-proof-m005-s01.txt",
+        "mediaType": "text/plain",
+        "byteSize": 31,
+        "source": {
+          "kind": "inline_base64",
+          "base64": "UHJvb2YgYXR0YWNobWVudCBmb3IgTTAwNSBTMDEuCg=="
+        }
+      }
+    ]
+  }
+]
