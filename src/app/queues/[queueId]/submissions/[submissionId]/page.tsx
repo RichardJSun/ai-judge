@@ -34,6 +34,45 @@ export function fetchSubmissionDetail(queueId: string, submissionId: string) {
   });
 }
 
+export type SubmissionDetailNavigationSource = 'queue' | 'results';
+
+export function parseSubmissionDetailNavigationSource(
+  source: string | string[] | undefined
+): SubmissionDetailNavigationSource {
+  return source === 'results' ? 'results' : 'queue';
+}
+
+export function getSubmissionDetailBackHref(
+  queueId: string,
+  source: SubmissionDetailNavigationSource
+) {
+  return source === 'results' ? `/queues/${queueId}/results` : `/queues/${queueId}`;
+}
+
+export interface SubmissionDetailBackNavigationRouter {
+  back: () => void;
+  push: (href: string) => void;
+}
+
+export function handleSubmissionDetailBack({
+  queueId,
+  source,
+  router,
+  historyLength,
+}: {
+  queueId: string;
+  source: SubmissionDetailNavigationSource;
+  router: SubmissionDetailBackNavigationRouter;
+  historyLength: number;
+}) {
+  if (source === 'results' && historyLength > 1) {
+    router.back();
+    return;
+  }
+
+  router.push(getSubmissionDetailBackHref(queueId, source));
+}
+
 export interface SubmissionDetailPageContentProps {
   queueId: string;
   detail?: SubmissionDetailResponse;
@@ -95,10 +134,13 @@ export function SubmissionDetailPageContent({
 
 export default function SubmissionDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ queueId: string; submissionId: string }>;
+  searchParams: Promise<{ source?: string | string[] | undefined }>;
 }) {
   const { queueId, submissionId } = use(params);
+  const { source } = use(searchParams);
   const router = useRouter();
 
   const query = useQuery<SubmissionDetailResponse, Error>({
@@ -114,7 +156,14 @@ export default function SubmissionDetailPage({
       isLoading={query.isLoading && !query.data}
       error={query.error}
       onRetry={() => query.refetch()}
-      onBack={() => router.push(`/queues/${queueId}`)}
+      onBack={() =>
+        handleSubmissionDetailBack({
+          queueId,
+          source: parseSubmissionDetailNavigationSource(source),
+          router,
+          historyLength: typeof window === 'undefined' ? 0 : window.history.length,
+        })
+      }
     />
   );
 }

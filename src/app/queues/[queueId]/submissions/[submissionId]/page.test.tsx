@@ -3,7 +3,10 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import type { SubmissionDetailResponse } from '@/types/api';
 import {
   fetchSubmissionDetail,
+  getSubmissionDetailBackHref,
   getSubmissionDetailQueryKey,
+  handleSubmissionDetailBack,
+  parseSubmissionDetailNavigationSource,
   SubmissionDetailPageContent,
 } from './page';
 
@@ -114,6 +117,79 @@ describe('submission detail page helpers', () => {
     await expect(fetchSubmissionDetail('queue-1', 'submission-missing')).rejects.toThrow(
       'Submission not found for queue. No submission detail row matched queue queue-1 and submission submission-missing.'
     );
+  });
+
+  it('treats only the constrained results marker as a results-origin visit', () => {
+    expect(parseSubmissionDetailNavigationSource('results')).toBe('results');
+    expect(parseSubmissionDetailNavigationSource(undefined)).toBe('queue');
+    expect(parseSubmissionDetailNavigationSource('queue')).toBe('queue');
+    expect(parseSubmissionDetailNavigationSource('anything-else')).toBe('queue');
+    expect(parseSubmissionDetailNavigationSource(['results'])).toBe('queue');
+  });
+
+  it('keeps queue-origin and results fallback targets queue scoped', () => {
+    expect(getSubmissionDetailBackHref('queue-1', 'queue')).toBe('/queues/queue-1');
+    expect(getSubmissionDetailBackHref('queue-1', 'results')).toBe('/queues/queue-1/results');
+  });
+
+  it('returns queue-origin visits to the queue page', () => {
+    const router = {
+      back: mock(() => undefined),
+      push: mock((_href: string) => undefined),
+    };
+
+    handleSubmissionDetailBack({
+      queueId: 'queue-1',
+      source: 'queue',
+      router,
+      historyLength: 5,
+    });
+
+    expect(router.back).not.toHaveBeenCalled();
+    expect(router.push).toHaveBeenCalledWith('/queues/queue-1');
+  });
+
+  it('prefers browser history for results-origin visits when history is available', () => {
+    const router = {
+      back: mock(() => undefined),
+      push: mock((_href: string) => undefined),
+    };
+
+    handleSubmissionDetailBack({
+      queueId: 'queue-1',
+      source: 'results',
+      router,
+      historyLength: 2,
+    });
+
+    expect(router.back).toHaveBeenCalledTimes(1);
+    expect(router.push).not.toHaveBeenCalled();
+  });
+
+  it('falls back to queue-scoped results when a results-origin visit has no history', () => {
+    const router = {
+      back: mock(() => undefined),
+      push: mock((_href: string) => undefined),
+    };
+
+    handleSubmissionDetailBack({
+      queueId: 'queue-1',
+      source: parseSubmissionDetailNavigationSource('unknown-source'),
+      router,
+      historyLength: 0,
+    });
+
+    expect(router.back).not.toHaveBeenCalled();
+    expect(router.push).toHaveBeenCalledWith('/queues/queue-1');
+
+    handleSubmissionDetailBack({
+      queueId: 'queue-1',
+      source: 'results',
+      router,
+      historyLength: 1,
+    });
+
+    expect(router.push).toHaveBeenLastCalledWith('/queues/queue-1/results');
   });
 });
 
