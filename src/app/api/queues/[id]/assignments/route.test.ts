@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import { handleGetAssignments, handlePostAssignments } from './route';
+import { handleGetQuestions } from '../questions/route';
 
 type QueryResult<T> = {
   data: T | null;
@@ -89,6 +90,24 @@ function createAssignmentRow(overrides: Partial<Record<string, unknown>> = {}) {
   };
 }
 
+function createQuestionRow(overrides: Partial<Record<string, unknown>> = {}) {
+  return {
+    id: '22222222-2222-4222-8222-222222222222',
+    external_id: 'question-external-1',
+    question_text: 'Describe something.',
+    question_type: 'short_text',
+    created_at: '2026-03-28T10:01:00.000Z',
+    ...overrides,
+  };
+}
+
+function createQuestionClient(forwarding: boolean) {
+  return new FakeSupabaseClient({
+    question_templates: () => json([createQuestionRow()]),
+    judge_assignments: () => json([createAssignmentRow({ attachment_forwarding: forwarding })]),
+  }) as never;
+}
+
 function createGetRequest() {
   return new Request('http://localhost/api/queues/queue-uuid-1/assignments');
 }
@@ -128,6 +147,14 @@ describe('handlePostAssignments', () => {
   it('persists attachment_forwarding through create and update flows', async () => {
     const context = { params: Promise.resolve({ id: 'queue-uuid-1' }) };
 
+    const expectQuestionForwarding = async (state: boolean) => {
+      const questionResponse = await handleGetQuestions(createGetRequest(), context, {
+        createServiceClient: () => createQuestionClient(state),
+      });
+      const [payload] = await questionResponse.json();
+      expect(payload.assignments[0].attachment_forwarding).toBe(state);
+    };
+
     const postClientFalse = new FakeSupabaseClient({
       judge_assignments: (query) => {
         expect(query.payload).toMatchObject({
@@ -154,6 +181,8 @@ describe('handlePostAssignments', () => {
     const createPayload = await createResponse.json();
     expect(createResponse.status).toBe(201);
     expect(createPayload).toMatchObject({ attachment_forwarding: false });
+
+    await expectQuestionForwarding(false);
 
     const getResponseBeforeUpdate = await handleGetAssignments(createGetRequest(), context, {
       createServiceClient: () =>
@@ -184,6 +213,8 @@ describe('handlePostAssignments', () => {
     expect(updateResponse.status).toBe(201);
     expect((await updateResponse.json()).attachment_forwarding).toBe(true);
 
+    await expectQuestionForwarding(true);
+
     const getResponseAfterUpdate = await handleGetAssignments(createGetRequest(), context, {
       createServiceClient: () =>
         new FakeSupabaseClient({
@@ -192,5 +223,36 @@ describe('handlePostAssignments', () => {
     });
 
     expect((await getResponseAfterUpdate.json())[0].attachment_forwarding).toBe(true);
+
+    const postClientRevert = new FakeSupabaseClient({
+      judge_assignments: (query) => {
+        expect(query.payload).toMatchObject({ attachment_forwarding: false });
+        return json(createAssignmentRow({ attachment_forwarding: false }));
+      },
+    }) as never;
+
+    const revertResponse = await handlePostAssignments(
+      createPostRequest({
+        judge_id: '11111111-1111-4111-8111-111111111111',
+        question_template_id: '22222222-2222-4222-8222-222222222222',
+        attachment_forwarding: false,
+      }),
+      context,
+      { createServiceClient: () => postClientRevert }
+    );
+
+    expect(revertResponse.status).toBe(201);
+    expect((await revertResponse.json()).attachment_forwarding).toBe(false);
+
+    await expectQuestionForwarding(false);
+
+    const getResponseAfterRevert = await handleGetAssignments(createGetRequest(), context, {
+      createServiceClient: () =>
+        new FakeSupabaseClient({
+          judge_assignments: () => json([createAssignmentRow({ attachment_forwarding: false })]),
+        }) as never,
+    });
+
+    expect((await getResponseAfterRevert.json())[0].attachment_forwarding).toBe(false);
   });
 });

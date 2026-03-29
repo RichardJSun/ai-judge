@@ -6,12 +6,21 @@ import {
 import { createServiceClient } from '@/lib/supabase/server';
 import { NextRequest, NextResponse } from 'next/server';
 
-export async function GET(
+type QuestionsRouteDeps = {
+  createServiceClient: typeof createServiceClient;
+};
+
+const defaultDeps: QuestionsRouteDeps = {
+  createServiceClient,
+};
+
+export async function handleGetQuestions(
   _request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
+  deps: QuestionsRouteDeps = defaultDeps
 ) {
   const { id } = await params;
-  const supabase = createServiceClient();
+  const supabase = deps.createServiceClient();
 
   const [questionsResult, assignmentsResult] = await Promise.all([
     supabase
@@ -58,4 +67,11 @@ export async function GET(
 
     return NextResponse.json({ error: 'Failed to load queue questions.' }, { status: 500 });
   }
+}
+
+export async function GET(
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
+  return handleGetQuestions(request, context);
 }

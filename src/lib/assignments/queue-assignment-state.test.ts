@@ -166,6 +166,21 @@ describe('parseQueueQuestionList', () => {
       ])
     ).toThrowError(QueueAssignmentStateError);
   });
+
+  it('keeps attachment_forwarding values when parsing queued question assignments', () => {
+    const questions = parseQueueQuestionList([
+      {
+        id: 'question-1',
+        external_id: 'Q1',
+        question_text: 'How would you answer?',
+        question_type: 'short_text',
+        created_at: '2026-03-28T00:00:00.000Z',
+        assignments: [makeAssignment({ attachment_forwarding: true })],
+      },
+    ]);
+
+    expect(questions[0].assignments[0].attachment_forwarding).toBe(true);
+  });
 });
 
 describe('derived assignment state', () => {
