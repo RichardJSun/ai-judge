@@ -55,8 +55,7 @@ describe('parseVerifierOptions', () => {
       parseVerifierOptions([
         '--base-url',
         'http://localhost:3000',
-        '--poll-ms',
-        '-5',
+        '--poll-ms=-5',
       ])
     ).toThrow('--poll-ms must be a positive integer.');
   });

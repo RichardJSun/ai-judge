@@ -20,6 +20,7 @@ import {
 import Link from 'next/link';
 import { useState } from 'react';
 import type { ResultsEvaluation } from '@/types/api';
+import { parsePlanMarker, type EvaluationPlanMarker } from '@/lib/ai/plan-marker';
 import ReviewerTableSurface from '@/components/layout/ReviewerTableSurface';
 import VerdictChip from './VerdictChip';
 
@@ -64,6 +65,35 @@ function formatRetryCount(retryCount: number) {
   return retryCount === 1 ? '1 retry' : `${retryCount} retries`;
 }
 
+type PlanMarkerState =
+  | { state: 'missing' }
+  | { state: 'error'; error: string }
+  | { state: 'ok'; marker: EvaluationPlanMarker };
+
+function planMarkerErrorMessage(error: unknown) {
+  if (error instanceof Error && error.message.trim()) {
+    return error.message;
+  }
+
+  if (typeof error === 'string' && error.trim()) {
+    return error;
+  }
+
+  return 'Plan marker is malformed.';
+}
+
+function getPlanMarkerState(snapshot: string | null): PlanMarkerState {
+  if (!snapshot) {
+    return { state: 'missing' };
+  }
+
+  try {
+    return { state: 'ok', marker: parsePlanMarker(snapshot) };
+  } catch (error) {
+    return { state: 'error', error: planMarkerErrorMessage(error) };
+  }
+}
+
 function AuditField({
   label,
   value,
@@ -95,6 +125,7 @@ function ExpandableRow({
   const [open, setOpen] = useState(false);
   const reasoningSummary = summarizeReasoning(evaluation.reasoning);
   const hasFullReasoning = Boolean(evaluation.reasoning && evaluation.reasoning.trim().length > 0);
+  const planMarkerState = getPlanMarkerState(evaluation.prompt_snapshot);
 
   return (
     <>
@@ -222,6 +253,48 @@ function ExpandableRow({
                       {evaluation.prompt_snapshot ?? 'Prompt snapshot was not captured for this run.'}
                     </Typography>
                   </Paper>
+                </Box>
+
+                <Box>
+                  <Typography variant="caption" color="text.secondary" display="block" mb={0.5}>
+                    Plan marker
+                  </Typography>
+                  {planMarkerState.state === 'missing' ? (
+                    <Typography variant="body2" color="text.secondary">
+                      Plan marker was not captured for this run.
+                    </Typography>
+                  ) : planMarkerState.state === 'error' ? (
+                    <Typography variant="body2" color="error">
+                      {planMarkerState.error}
+                    </Typography>
+                  ) : (
+                    <>
+                      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={3} useFlexGap flexWrap="wrap">
+                        <AuditField label="Plan marker kind" value={planMarkerState.marker.kind} monospace />
+                        <AuditField
+                          label="Forwarding requested"
+                          value={planMarkerState.marker.forwardingRequested ? 'yes' : 'no'}
+                        />
+                        {planMarkerState.marker.supportedMedia && planMarkerState.marker.supportedMedia.length > 0 ? (
+                          <AuditField
+                            label="Supported media"
+                            value={planMarkerState.marker.supportedMedia.join(', ')}
+                            monospace
+                          />
+                        ) : null}
+                      </Stack>
+                      {planMarkerState.marker.blockedReason ? (
+                        <Box mt={1}>
+                          <Typography variant="caption" color="error" display="block" mb={0.5}>
+                            Blocked diagnostics
+                          </Typography>
+                          <Typography variant="body2" color="error">
+                            {planMarkerState.marker.blockedReason}
+                          </Typography>
+                        </Box>
+                      ) : null}
+                    </>
+                  )}
                 </Box>
 
                 {evaluation.error_message ? (

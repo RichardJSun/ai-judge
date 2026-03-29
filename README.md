@@ -91,18 +91,18 @@ With the local app running, the slice verifiers exercise the real workflow again
 ```bash
 bun run verify:s01-live -- --base-url http://localhost:3000
 bun run verify:s02-live -- --base-url http://localhost:3000
-bun run verify:s03-live -- --base-url http://localhost:3000
-bun run verify:s04-live -- --base-url http://localhost:3000
+bun run verify:m005-s03 -- --base-url http://localhost:3000 --timeout-ms 180000
+bun run verify:s04-live -- --base-url http://localhost:3000 --timeout-ms 180000
 ```
 
 What they prove:
 
 - `verify:s01-live` checks upload, run preview, run start, run polling, and persisted evaluation audit basics.
 - `verify:s02-live` checks upload/assignment/run wiring and the reviewer-facing judges lifecycle surface.
-- `verify:s03-live` checks the queue results workflow end to end, including real results persistence, judge/question/verdict filters, pass-rate aggregation, and the results page reachability.
-- `verify:s04-live` proves the full spec-ordered reviewer walkthrough end to end: upload → judges CRUD → assignment → run → results. It also emits the concrete queue, judge, question, assignment, run, page, and filtered API targets that a reviewer can copy directly into a browser follow-up.
+- `verify:m005-s03` checks the queue results workflow end to end, including real results persistence, judge/question/verdict filters, pass-rate aggregation, readiness and poll budgets, and the reviewer audit evidence (plan markers, blocked diagnostics, and the filtered results API) that proves supported, disabled, and blocked paths.
+- `verify:s04-live` proves the full spec-ordered reviewer walkthrough end to end: upload → judges CRUD → assignment → run → results. It still emits the concrete queue, judge, question, assignment, run, page, and filtered API targets that a reviewer can copy directly into a browser follow-up.
 
-Both `verify-m005-s03` and `verify:s04-live` now surface the readiness/poll budgets (`env-readiness`, `schema-readiness`, `storage-readiness`, `model-readiness`, `results-poll`) so you know immediately whether migrations, storage buckets, env knobs, or the chosen model are blocking the proof before the expensive upload/run phases start — tune the `--timeout-ms` and `--poll-ms` overrides if a phase consistently exhausts its budget.
+Both `verify:m005-s03` and `verify:s04-live` now surface the readiness/poll budgets (`env-readiness`, `schema-readiness`, `storage-readiness`, `model-readiness`, `results-poll`) so you know immediately whether migrations, storage buckets, env knobs, or the chosen model are blocking the proof before the expensive upload/run phases start. Tune the `--timeout-ms`/`--poll-ms` overrides (or the `M005_S03_VERIFY_*` and `S04_VERIFY_*` env vars) if a phase consistently exhausts its budget, and copy the filtered `results` API URL from the command output whenever you need run-scoped evidence.
 
 All four commands require a reachable Next.js app at `--base-url`. If you do not pass the flag, the scripts only fall back to `BASE_URL` when that env var is set.
 
@@ -121,8 +121,8 @@ All four commands require a reachable Next.js app at `--base-url`. If you do not
 
 ### Recommended verification order (S01 → S04)
 1. Run `bun run verify:m005-s01 -- --base-url http://localhost:3000` to reproduce the deterministic fixture that uploads attachments and emits the queue/submission coordinates later proofs rely on. Without this fixture, S04 may not find the expected attachment rows.
-2. Run the S02/S03 proofs (`bun run verify:m005-s02` followed by `bun run verify:m005-s03 -- --base-url http://localhost:3000`) to re-prove that assignment forwarding, prompt_snapshot, and auth filtering are stable and to emit the queue/judge/assignment identifiers that S04 reuses. The S04 verifier assumes those identifiers exist and that the reviewer flow is queue-scoped rather than run-scoped, so use the `results` API URL it spits out if you need to isolate the latest proof.
-3. Finally run `bun run verify:s04-live -- --base-url http://localhost:3000`. This command performs the upload → judges → assignment → run → results workflow and prints the `OK` line with queue, judge, run, results, and inspection URLs.
+2. Run the S02/S03 proofs (`bun run verify:m005-s02` followed by `bun run verify:m005-s03 -- --base-url http://localhost:3000 --timeout-ms 180000`) to re-prove that assignment forwarding, prompt_snapshot, and auth filtering are stable and to emit the queue/judge/assignment identifiers that S04 reuses. The S04 verifier assumes those identifiers exist and that the reviewer flow is queue-scoped rather than run-scoped, so use the `results` API URL it spits out if you need to isolate the latest proof.
+3. Finally run `bun run verify:s04-live -- --base-url http://localhost:3000 --timeout-ms 180000`. This command performs the upload → judges → assignment → run → results workflow and prints the `OK` line with queue, judge, run, results, and inspection URLs.
 
 The docs above reuse the S01–S03 proof targets because they form the deterministic path that the attachment-backed verifier covers. When browsing the reviewer history after multiple runs, prefer the filtered URLs from the emitted `Inspect`/`APIs` lines, since the visible pages (`/queues/…/results`, `/queues/…/assign`) always show queue-level history.
 
@@ -149,7 +149,7 @@ Use this when you need the final handoff proof from a fresh context window.
 2. **Run the live proof**.
 
    ```bash
-   bun run verify:s04-live -- --base-url http://localhost:3000
+   bun run verify:s04-live -- --base-url http://localhost:3000 --timeout-ms 180000
    ```
 
 3. **Copy the emitted identifiers from the `OK ...` line**.

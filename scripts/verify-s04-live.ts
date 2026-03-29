@@ -2085,7 +2085,7 @@ async function verifyResultsApiProof(input: {
   } satisfies ResultsProofSummary;
 }
 
-function buildScenarioProofEntries(input: {
+export function buildScenarioProofEntries(input: {
   evaluations: ResultsEvaluation[];
   refs: PhaseRefs;
 }): ScenarioProofEntry[] {

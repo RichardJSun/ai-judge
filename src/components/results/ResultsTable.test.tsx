@@ -11,12 +11,15 @@ const LONG_REASONING = [
   'still passes because the primary requirement was satisfied with evidence.',
 ].join(' ');
 
+const DEFAULT_PROMPT_SNAPSHOT =
+  'Prompt snapshot content describing stored attachments and forwarding.\nPlan marker: {"version":1,"kind":"text-only","forwardingRequested":false}';
+
 function createEvaluation(overrides: Partial<ResultsEvaluation> = {}): ResultsEvaluation {
   return {
     id: 'evaluation-1',
     verdict: 'pass',
     reasoning: LONG_REASONING,
-    prompt_snapshot: 'Prompt snapshot content describing stored attachments and forwarding.',
+    prompt_snapshot: DEFAULT_PROMPT_SNAPSHOT,
     model_used: 'gateway/model-a',
     tokens_used: 321,
     latency_ms: 875,
@@ -83,6 +86,9 @@ describe('ResultsTable', () => {
     expect(html).toContain('completed');
     expect(html).toContain('Prompt snapshot');
     expect(html).toContain('Prompt snapshot content describing stored attachments and forwarding.');
+    expect(html).toContain('Plan marker');
+    expect(html).toContain('Plan marker kind');
+    expect(html).toContain('Forwarding requested');
   });
 
   it('keeps errored rows with long submission ids and missing optional audit fields renderable behind a valid detail link', () => {
@@ -121,6 +127,32 @@ describe('ResultsTable', () => {
     expect(html).toContain('error');
     expect(html).toContain('Prompt snapshot');
     expect(html).toContain('Prompt snapshot was not captured for this run.');
+  });
+
+  it('surfaces blocked diagnostics when the plan marker indicates a blocked path', () => {
+    const blockedHtml = renderToStaticMarkup(
+      <ResultsTable
+        queueId={QUEUE_ID}
+        evaluations={
+          [
+            createEvaluation({
+              id: 'evaluation-3',
+              verdict: null,
+              status: 'error',
+              prompt_snapshot:
+                'Forwarding requested: yes\nPlan: blocked\nPlan marker: {"version":1,"kind":"blocked","forwardingRequested":true,"blockedReason":"forwarding disabled"}',
+              error_message: 'forwarding disabled',
+            }),
+          ]
+        }
+      />
+    );
+
+    expect(blockedHtml).toContain('Plan marker');
+    expect(blockedHtml).toContain('Plan marker kind');
+    expect(blockedHtml).toContain('Forwarding requested');
+    expect(blockedHtml).toContain('Blocked diagnostics');
+    expect(blockedHtml).toContain('forwarding disabled');
   });
 
   it('renders multiple visible rows for the same submission without adding a separate action column', () => {

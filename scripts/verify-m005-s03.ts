@@ -674,11 +674,17 @@ export async function pollForScenarios(
 
       const promptSnapshot = evaluation.prompt_snapshot;
       if (!promptSnapshot) {
-        throw new VerifierPhaseError(
-          'results-poll',
-          `Evaluation ${evaluation.id} is missing prompt_snapshot for scenario ${scenario}.`,
-          { ...refs, scenario, evaluationId: evaluation.id, questionId }
-        );
+        lastState[scenario] = {
+          scenario,
+          evaluationId: evaluation.id,
+          judgeId: info.judgeId,
+          judgeName: info.judgeName,
+          status: evaluation.status,
+          promptSnapshot: '',
+          modelUsed: evaluation.model_used ?? '',
+          errorMessage: evaluation.error_message ?? null,
+        };
+        continue;
       }
 
       const result: ScenarioResult = {
