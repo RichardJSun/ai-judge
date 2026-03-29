@@ -33,7 +33,19 @@
         "evidence": "The recommendation ignores the strongest contradictory fact.",
         "notes": "The conclusion overstates certainty."
       }
-    }
+    },
+    "attachments": [
+      {
+        "id": "attachment_s04_live_proof",
+        "fileName": "attachment-proof-s04.png",
+        "mediaType": "image/png",
+        "byteSize": 70,
+        "source": {
+          "kind": "inline_base64",
+          "base64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PmJb9wAAAABJRU5ErkJggg=="
+        }
+      }
+    ]
   },
   {
     "id": "sub_s04_2",

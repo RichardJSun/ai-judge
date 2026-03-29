@@ -10,8 +10,20 @@ import {
 } from '../src/lib/assignments/queue-assignment-state';
 import { parseJudgeList, parseJudgeRecord } from '../src/lib/judges/judge-lifecycle';
 import { parseResultsResponse } from '../src/lib/results/fetch-json';
-import type { ResultsEvaluation, UploadResult } from '../src/types/api';
-import type { Judge, QuestionTemplate, RunStatusEnum, VerdictEnum } from '../src/types/db';
+import { parseSubmissionDetailResponse } from '../src/lib/submissions/fetch-json';
+import type {
+  ResultsEvaluation,
+  SubmissionDetailAttachment,
+  SubmissionDetailResponse,
+  UploadResult,
+} from '../src/types/api';
+import type {
+  EvalStatusEnum,
+  Judge,
+  QuestionTemplate,
+  RunStatusEnum,
+  VerdictEnum,
+} from '../src/types/db';
 import {
   assertPersistedAudit,
   pollRunUntilTerminal,
@@ -25,6 +37,7 @@ import {
   loadFixture,
 } from './verify-s02-live';
 import { assertFilteredResultsResponse } from './verify-s03-live';
+import { assertPersistedAttachmentRow } from './verify-m005-s01';
 
 type FetchLike = typeof fetch;
 type ReadFileLike = typeof readFile;
@@ -37,7 +50,10 @@ type PhaseName =
   | 'run-start'
   | 'run-poll'
   | 'results-assertions'
-  | 'page-confirmation';
+  | 'page-confirmation'
+  | 'submission-detail'
+  | 'submission-page'
+  | 'scenario-proof';
 
 type PhaseRefs = {
   queueId?: string;
@@ -48,9 +64,14 @@ type PhaseRefs = {
   questionId?: string;
   assignmentId?: string;
   runId?: string;
+  submissionId?: string;
+  submissionExternalId?: string;
   endpoint?: string;
   page?: string;
+  detailUrl?: string;
   filter?: string;
+  attachmentId?: string;
+  storagePath?: string;
 };
 
 type QueueRow = {
@@ -59,10 +80,41 @@ type QueueRow = {
   created_at: string;
 };
 
-type PersistedQuestion = Pick<
-  QuestionTemplate,
-  'id' | 'queue_id' | 'external_id' | 'question_text' | 'question_type' | 'created_at'
->;
+type ScenarioName = 'text-only' | 'multimodal' | 'blocked';
+
+type ScenarioProofEntry = {
+  scenario: ScenarioName;
+  evaluationId: string;
+  status: EvalStatusEnum;
+  verdict: VerdictEnum | null;
+  modelUsed: string;
+  promptSnapshot: string;
+  errorMessage: string | null;
+};
+
+type AttachmentDetail = {
+  id: string;
+  externalAttachmentId: string;
+  fileName: string;
+  mediaType: string;
+  storageStatus: SubmissionDetailAttachment['storage_status'];
+};
+
+type AttachmentProofSummary = {
+  submissionId: string;
+  submissionExternalId: string;
+  detailUrl: string;
+  detailApiUrl: string;
+  attachments: AttachmentDetail[];
+};
+
+type AssignmentForwardingEntry = {
+  questionId: string;
+  assignmentId: string;
+  attachmentForwarding: boolean;
+};
+
+const SCENARIO_NAMES: ScenarioName[] = ['text-only', 'multimodal', 'blocked'];
 
 type FixtureSummary = UploadResult & {
   queueIds: string[];
@@ -82,6 +134,7 @@ type SetupAssignmentTarget = {
   question: PersistedQuestion;
   answerCount: number;
   assignmentId: string;
+  attachmentForwarding: boolean;
 };
 
 type AssignmentProofSummary = {
@@ -134,6 +187,7 @@ export type ApiUrls = {
   runStart: string;
   runProgress: string;
   results: string;
+  submissionDetail: string;
 };
 
 export type VerifierOptions = {
@@ -158,6 +212,9 @@ export type LiveVerificationSummary = {
   assignmentProof: AssignmentProofSummary;
   run: RunProofSummary;
   resultsProof: ResultsProofSummary;
+  attachmentProof: AttachmentProofSummary;
+  assignmentForwarding: AssignmentForwardingEntry[];
+  scenarioProof: ScenarioProofEntry[];
   inspectionUrls: InspectionUrls;
   apiUrls: ApiUrls;
 };
@@ -187,11 +244,16 @@ const REQUIRED_TABLES = [
   'evaluation_runs',
   'evaluations',
 ] as const;
-const VALID_MODEL = process.env.S04_VERIFY_MODEL ?? process.env.S03_VERIFY_MODEL ?? 'openai/gpt-4o-mini';
+const VALID_MODEL = process.env.S04_VERIFY_MODEL ?? process.env.S03_VERIFY_MODEL ?? 'gateway/multimodal-model';
 const INVALID_MODEL = 'openai/not-a-real-model-s04-live';
 const VALID_JUDGE_PREFIX = 'S04 Live Results Valid';
 const INVALID_JUDGE_PREFIX = 'S04 Live Results Invalid';
-const VERIFIER_PROMPT_FIELDS = ['questionText', 'answer', 'questionType'] as const;
+const ATTACHMENT_FORWARDING_INDEX = 1;
+
+function shouldForwardAttachmentsForQuestion(index: number) {
+  return index === ATTACHMENT_FORWARDING_INDEX;
+}
+
 const execFileAsync = promisify(execFile);
 
 function baseUrlFromInput(rawUrl: string | undefined) {
@@ -540,7 +602,8 @@ export function buildInspectionUrls(
   baseUrl: string,
   queueId: string,
   validJudgeId: string,
-  invalidJudgeId: string
+  invalidJudgeId: string,
+  submissionId: string
 ): InspectionUrls {
   const normalizedBaseUrl = baseUrl.replace(/\/$/, '');
 
@@ -553,6 +616,7 @@ export function buildInspectionUrls(
     assign: `${normalizedBaseUrl}/queues/${queueId}/assign`,
     run: `${normalizedBaseUrl}/queues/${queueId}/run`,
     results: `${normalizedBaseUrl}/queues/${queueId}/results`,
+    submissionDetail: `${normalizedBaseUrl}/queues/${queueId}/submissions/${submissionId}?source=results`,
   };
 }
 
@@ -560,7 +624,8 @@ export function buildApiUrls(
   baseUrl: string,
   queueId: string,
   runId: string,
-  resultsQueryString: string
+  resultsQueryString: string,
+  submissionId: string
 ): ApiUrls {
   const normalizedBaseUrl = baseUrl.replace(/\/$/, '');
 
@@ -569,6 +634,7 @@ export function buildApiUrls(
     runStart: `${normalizedBaseUrl}/api/queues/${queueId}/runs`,
     runProgress: `${normalizedBaseUrl}/api/queues/${queueId}/runs/${runId}`,
     results: `${normalizedBaseUrl}/api/queues/${queueId}/results?${resultsQueryString}`,
+    submissionDetail: `${normalizedBaseUrl}/api/queues/${queueId}/submissions/${submissionId}`,
   };
 }
 
@@ -582,6 +648,7 @@ export function assertInspectionUrls(urls: Partial<InspectionUrls>): InspectionU
     'assign',
     'run',
     'results',
+    'submissionDetail',
   ];
 
   for (const key of requiredKeys) {
@@ -602,6 +669,23 @@ export function formatSetupSummary(summary: LiveVerificationSummary) {
     )
     .join(',');
 
+  const attachmentRefs = summary.attachmentProof.attachments
+    .map((attachment) => `${attachment.id}:${attachment.fileName}:${attachment.storageStatus}`)
+    .join(',');
+
+  const forwardingRefs = summary.assignmentForwarding
+    .map((entry) =>
+      `${entry.questionId}:${entry.assignmentId}:${entry.attachmentForwarding ? 'forward' : 'no-forward'}`
+    )
+    .join(',');
+
+  const scenarioRefs = summary.scenarioProof
+    .map((entry) => {
+      const base = `${entry.scenario}:${entry.evaluationId}:${entry.status}:${entry.modelUsed}`;
+      return entry.errorMessage ? `${base}:${entry.errorMessage}` : base;
+    })
+    .join(',');
+
   return [
     `queue=${summary.queueId}`,
     `queueLabel=${summary.queueLabel}`,
@@ -613,6 +697,12 @@ export function formatSetupSummary(summary: LiveVerificationSummary) {
     `run=${summary.run.runId}:${summary.run.status}:${summary.run.previewTotal}/${summary.run.startedTotal}:${summary.run.completedRows}/${summary.run.erroredRows}/${summary.run.retriedRows}`,
     `verdictFilter=${summary.resultsProof.verdictFilter}`,
     `results=${summary.resultsProof.currentTotal}/${summary.resultsProof.currentCompleted}/${summary.resultsProof.currentErrored}`,
+    `submission=${summary.attachmentProof.submissionId}:${summary.attachmentProof.submissionExternalId}`,
+    `detailUrl=${summary.attachmentProof.detailUrl}`,
+    `detailApiUrl=${summary.attachmentProof.detailApiUrl}`,
+    `attachments=${attachmentRefs || 'none'}`,
+    `forwarding=${forwardingRefs}`,
+    `scenarios=${scenarioRefs}`,
   ].join(' ');
 }
 
@@ -628,6 +718,7 @@ export function formatInspectionTargets(summary: LiveVerificationSummary) {
     `assign=${inspectionUrls.assign}`,
     `run=${inspectionUrls.run}`,
     `results=${inspectionUrls.results}`,
+    `submissionDetail=${inspectionUrls.submissionDetail}`,
   ].join(' ');
 }
 
@@ -637,6 +728,7 @@ export function formatApiTargets(summary: LiveVerificationSummary) {
     `runStart=${summary.apiUrls.runStart}`,
     `runProgress=${summary.apiUrls.runProgress}`,
     `results=${summary.apiUrls.results}`,
+    `submissionDetail=${summary.apiUrls.submissionDetail}`,
   ].join(' ');
 }
 
@@ -799,6 +891,45 @@ async function findPersistedQueueAndQuestions(supabase: SupabaseClient, target: 
   };
 }
 
+async function findSubmissionWithAttachments(
+  supabase: SupabaseClient,
+  queueId: string,
+  queueLabel: string,
+  refs: PhaseRefs
+) {
+  const { data: submissions, error } = await supabase
+    .from('submissions')
+    .select('id, external_id')
+    .eq('queue_id', queueId)
+    .order('created_at', { ascending: true });
+
+  if (error) {
+    throw new VerifierPhaseError('submission-detail', error.message, { ...refs, queueId, queueLabel });
+  }
+
+  for (const submission of (submissions ?? []) as Array<{ id: string; external_id: string }>) {
+    const attachments = await loadSubmissionAttachments(supabase, submission.id, {
+      ...refs,
+      submissionId: submission.id,
+      submissionExternalId: submission.external_id,
+    });
+
+    if (attachments.length > 0) {
+      return {
+        submissionId: submission.id,
+        submissionExternalId: submission.external_id,
+        attachments,
+      };
+    }
+  }
+
+  throw new VerifierPhaseError('submission-detail', 'No submission with attachments was found.', {
+    ...refs,
+    queueId,
+    queueLabel,
+  });
+}
+
 async function fetchJudgesApi(baseUrl: string, timeoutMs: number, fetchImpl: FetchLike) {
   const payload = await readJsonResponse<unknown>(
     fetchImpl,
@@ -920,6 +1051,7 @@ async function createAssignmentApi(
   queueId: string,
   questionId: string,
   judgeId: string,
+  attachmentForwarding: boolean,
   timeoutMs: number,
   fetchImpl: FetchLike
 ) {
@@ -937,6 +1069,7 @@ async function createAssignmentApi(
         judge_id: judgeId,
         question_template_id: questionId,
         prompt_fields: [...VERIFIER_PROMPT_FIELDS],
+        attachment_forwarding: attachmentForwarding,
       }),
     }
   );
@@ -1033,6 +1166,24 @@ async function loadPersistedAssignmentRow(
   }
 
   return assertPersistedAssignmentRow(data);
+}
+
+async function loadSubmissionAttachments(
+  supabase: SupabaseClient,
+  submissionId: string,
+  refs: PhaseRefs
+) {
+  const { data, error } = await supabase
+    .from('submission_attachments')
+    .select('*')
+    .eq('submission_id', submissionId)
+    .order('created_at', { ascending: true });
+
+  if (error) {
+    throw new VerifierPhaseError('submission-detail', error.message, { ...refs, submissionId });
+  }
+
+  return (data ?? []).map((row) => assertPersistedAttachmentRow(row));
 }
 
 async function assertJudgeAcrossSurfaces(input: {
@@ -1254,6 +1405,14 @@ async function verifyAssignmentSurfaces(input: {
         { ...refs, questionId: expected.question.id, assignmentId: assignment.id ?? undefined }
       );
     }
+
+    if (assignment.attachment_forwarding !== expected.attachmentForwarding) {
+      throw new VerifierPhaseError(
+        'assignment-persistence',
+        `Assignment forwarding state was ${assignment.attachment_forwarding} instead of ${expected.attachmentForwarding}.`,
+        { ...refs, questionId: expected.question.id, assignmentId: assignment.id ?? undefined }
+      );
+    }
   }
 
   const questions = await fetchQuestionsApi(input.baseUrl, input.queueId, input.timeoutMs, input.fetchImpl);
@@ -1281,6 +1440,14 @@ async function verifyAssignmentSurfaces(input: {
       throw new VerifierPhaseError(
         'assignment-persistence',
         `Queue question assignment status was ${questionAssignment.judge_status} instead of ${input.expectedStatus}.`,
+        { ...refs, questionId: expected.question.id, assignmentId: questionAssignment.id ?? undefined }
+      );
+    }
+
+    if (questionAssignment.attachment_forwarding !== expected.attachmentForwarding) {
+      throw new VerifierPhaseError(
+        'assignment-persistence',
+        `Queue question assignment forwarding was ${questionAssignment.attachment_forwarding} instead of ${expected.attachmentForwarding}.`,
         { ...refs, questionId: expected.question.id, assignmentId: questionAssignment.id ?? undefined }
       );
     }
@@ -1379,12 +1546,14 @@ async function verifyValidJudgeAssignmentPersistence(input: {
   const baselinePreview = await fetchRunPreviewApi(input.baseUrl, input.queue.id, input.timeoutMs, input.fetchImpl);
 
   const createdAssignments: SetupAssignmentTarget[] = [];
-  for (const question of input.questions) {
+  for (const [index, question] of input.questions.entries()) {
+    const attachmentForwarding = shouldForwardAttachmentsForQuestion(index);
     const createdAssignment = await createAssignmentApi(
       input.baseUrl,
       input.queue.id,
       question.id,
       input.validJudge.id,
+      attachmentForwarding,
       input.timeoutMs,
       input.fetchImpl
     );
@@ -1417,6 +1586,7 @@ async function verifyValidJudgeAssignmentPersistence(input: {
       question,
       answerCount: input.answerCountByQuestionId.get(question.id) ?? 0,
       assignmentId: createdAssignment.id,
+      attachmentForwarding,
     });
   }
 
@@ -1572,6 +1742,7 @@ async function addInvalidJudgeAssignment(input: {
     input.queue.id,
     questionOne.id,
     input.invalidJudge.id,
+    true,
     input.timeoutMs,
     input.fetchImpl
   );
@@ -1614,6 +1785,7 @@ async function addInvalidJudgeAssignment(input: {
         question: questionOne,
         answerCount: input.answerCountByQuestionId.get(questionOne.id) ?? 0,
         assignmentId: createdAssignment.id,
+        attachmentForwarding: true,
       },
     ],
     timeoutMs: input.timeoutMs,
