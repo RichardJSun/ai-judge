@@ -61,6 +61,132 @@ export interface EvaluateParams {
   attachments: EvaluationAttachment[];
 }
 
+export type EvaluationPlanKind = 'text-only' | 'multimodal' | 'blocked';
+
+export interface EvaluationPlanResult {
+  kind: EvaluationPlanKind;
+  manifestText: string;
+  forwardingRequested: boolean;
+  supportedMedia?: readonly string[];
+  blockedReason?: string;
+}
+
+const MULTIMODAL_MODEL_CAPABILITIES: Record<string, readonly string[]> = {
+  'gateway/multimodal-model': ['image/png', 'image/jpeg'],
+};
+
+const DEFAULT_MANIFEST_TEXT = '  (none)';
+
+export function buildAttachmentManifest(attachments: EvaluationAttachment[]): string {
+  if (!attachments.length) {
+    return DEFAULT_MANIFEST_TEXT;
+  }
+
+  const sorted = [...attachments].sort((a, b) =>
+    a.externalAttachmentId.localeCompare(b.externalAttachmentId)
+  );
+
+  return sorted
+    .map(
+      (attachment) =>
+        `  - externalAttachmentId=${attachment.externalAttachmentId}; fileName=${attachment.fileName}; mediaType=${attachment.mediaType}; byteSize=${attachment.byteSize}; sourceKind=${attachment.sourceKind}; storageStatus=${attachment.storageStatus}`
+    )
+    .join('\n');
+}
+
+function validateAttachmentMetadata(attachment: EvaluationAttachment): string | null {
+  if (!attachment.externalAttachmentId?.trim()) {
+    return 'Attachment metadata missing externalAttachmentId.';
+  }
+
+  if (!attachment.fileName?.trim()) {
+    return `Attachment ${attachment.externalAttachmentId} missing fileName.`;
+  }
+
+  if (!attachment.mediaType?.trim()) {
+    return `Attachment ${attachment.externalAttachmentId} missing mediaType.`;
+  }
+
+  if (!attachment.storageBucket?.trim()) {
+    return `Attachment ${attachment.externalAttachmentId} missing storageBucket.`;
+  }
+
+  if (!attachment.storagePath?.trim()) {
+    return `Attachment ${attachment.externalAttachmentId} missing storagePath.`;
+  }
+
+  if (attachment.storageStatus !== 'stored') {
+    return `Attachment ${attachment.externalAttachmentId} storage status ${attachment.storageStatus} is not ready for forwarding.`;
+  }
+
+  return null;
+}
+
+export function planEvaluationRequest(params: EvaluateParams): EvaluationPlanResult {
+  const manifestText = buildAttachmentManifest(params.attachments);
+  const basePlan: EvaluationPlanResult = {
+    kind: 'text-only',
+    manifestText,
+    forwardingRequested: params.attachmentForwarding,
+  };
+
+  if (!params.attachmentForwarding || params.attachments.length === 0) {
+    return basePlan;
+  }
+
+  for (const attachment of params.attachments) {
+    const validationError = validateAttachmentMetadata(attachment);
+    if (validationError) {
+      return { ...basePlan, kind: 'blocked', blockedReason: validationError };
+    }
+  }
+
+  const modelCapabilities = MULTIMODAL_MODEL_CAPABILITIES[params.judge.model];
+  if (!modelCapabilities) {
+    return {
+      ...basePlan,
+      kind: 'blocked',
+      blockedReason: `Model ${params.judge.model} is not configured to accept forwarded attachments.`,
+    };
+  }
+
+  for (const attachment of params.attachments) {
+    if (!modelCapabilities.includes(attachment.mediaType)) {
+      return {
+        ...basePlan,
+        kind: 'blocked',
+        blockedReason: `Attachment ${attachment.externalAttachmentId} uses unsupported media type ${attachment.mediaType} for model ${params.judge.model}. Supported types: ${modelCapabilities.join(', ')}.`,
+      };
+    }
+  }
+
+  return {
+    ...basePlan,
+    kind: 'multimodal',
+    supportedMedia: [...modelCapabilities],
+  };
+}
+
+function buildPlanSnapshot(plan: EvaluationPlanResult): string {
+  const lines = [
+    '[Attachments]',
+    `Forwarding requested: ${plan.forwardingRequested ? 'yes' : 'no'}`,
+    `Plan: ${plan.kind}`,
+    plan.supportedMedia ? `Supported media: ${plan.supportedMedia.join(', ')}` : null,
+    'Manifest:',
+    plan.manifestText,
+  ].filter((line): line is string => Boolean(line));
+
+  return lines.join('\n');
+}
+
+export class EvaluationPlanError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'EvaluationPlanError';
+  }
+}
+
 export interface EvaluateSingleDeps {
   now(): number;
   sleep(ms: number): Promise<void>;
@@ -139,7 +265,8 @@ export async function evaluateSingle(
 ): Promise<void> {
   const { evaluationId, judge } = params;
   const prompt = buildPrompt(params);
-  const promptSnapshot = `[System]\n${judge.system_prompt}\n\n[User]\n${prompt}`;
+  const plan = planEvaluationRequest(params);
+  const promptSnapshot = `[System]\n${judge.system_prompt}\n\n[User]\n${prompt}\n\n${buildPlanSnapshot(plan)}`;
 
   let retryCount = 0;
   let lastTokensUsed: number | null = null;
@@ -161,6 +288,28 @@ export async function evaluateSingle(
   );
 
   const startedAt = deps.now();
+
+  if (plan.kind === 'blocked') {
+    const blockedReason =
+      plan.blockedReason ?? 'Evaluation request blocked due to capability constraints.';
+    await updateEvaluation(
+      supabase,
+      evaluationId,
+      buildAuditPatch({
+        status: 'error',
+        promptSnapshot,
+        modelUsed: judge.model,
+        retryCount,
+        errorMessage: blockedReason,
+        latencyMs: deps.now() - startedAt,
+        tokensUsed: null,
+        verdict: null,
+        reasoning: null,
+      })
+    );
+
+    throw new EvaluationPlanError(blockedReason);
+  }
 
   while (true) {
     let result: Awaited<ReturnType<EvaluateSingleDeps['generate']>>;

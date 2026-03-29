@@ -1,7 +1,14 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { APICallError, NoObjectGeneratedError } from 'ai';
 import { describe, expect, it } from 'bun:test';
-import { evaluateSingle, type EvaluateParams, type EvaluateSingleDeps } from '@/lib/ai/evaluator';
+import {
+  evaluateSingle,
+  planEvaluationRequest,
+  EvaluationPlanError,
+  type EvaluationAttachment,
+  type EvaluateParams,
+  type EvaluateSingleDeps,
+} from '@/lib/ai/evaluator';
 
 function createParams(overrides: Partial<EvaluateParams> = {}): EvaluateParams {
   return {
@@ -19,6 +26,23 @@ function createParams(overrides: Partial<EvaluateParams> = {}): EvaluateParams {
     promptFields: ['questionType', 'questionText', 'answer'],
     attachmentForwarding: false,
     attachments: [],
+    ...overrides,
+  };
+}
+
+function createAttachment(overrides: Partial<EvaluationAttachment> = {}): EvaluationAttachment {
+  return {
+    id: 'attachment-1',
+    submissionId: 'submission-1',
+    externalAttachmentId: 'external-attachment-1',
+    sourceKind: 'inline',
+    fileName: 'blob.png',
+    mediaType: 'image/png',
+    byteSize: 1024,
+    storageBucket: 'uploads',
+    storagePath: 'uploads/blob.png',
+    storageStatus: 'stored',
+    storageError: null,
     ...overrides,
   };
 }
@@ -166,8 +190,14 @@ describe('evaluateSingle', () => {
         status: 'running',
         model_used: 'gateway/model-a',
         retry_count: 0,
-        prompt_snapshot: '[System]\nBe precise.\n\n[User]\nQuestion Type: short_text\n\nQuestion: How would you answer?\n\nAnswer:\nvalue: "A careful answer"',
       });
+      expect(updates[0]?.values.prompt_snapshot).toBeDefined();
+      const runningSnapshot = String(updates[0]?.values.prompt_snapshot);
+      expect(runningSnapshot).toContain('[System]\nBe precise.');
+      expect(runningSnapshot).toContain('Question Type: short_text');
+      expect(runningSnapshot).toContain('Answer:\nvalue: "A careful answer"');
+      expect(runningSnapshot).toContain('[Attachments]');
+      expect(runningSnapshot).toContain('Plan: text-only');
       expect(updates[1]?.values).toMatchObject({
         status: 'completed',
         verdict: 'pass',
@@ -360,5 +390,141 @@ describe('evaluateSingle', () => {
       tokens_used: 321,
       retry_count: 0,
     });
+  });
+
+  it('keeps text-only plan when attachments exist but forwarding is disabled', async () => {
+    const attachments = [
+      createAttachment({ externalAttachmentId: 'b', fileName: 'beta.png' }),
+      createAttachment({ externalAttachmentId: 'a', fileName: 'alpha.png' }),
+    ];
+    const { supabase, updates } = createSupabaseMock();
+    const { deps, state } = createDeps();
+
+    await evaluateSingle(
+      supabase,
+      createParams({ attachmentForwarding: false, attachments }),
+      deps
+    );
+
+    expect(state.generateCalls).toHaveLength(1);
+    const snapshot = updates[0]?.values.prompt_snapshot as string;
+    expect(snapshot).toContain('Forwarding requested: no');
+    expect(snapshot).toContain('Plan: text-only');
+    expect(snapshot.indexOf('externalAttachmentId=a')).toBeLessThan(snapshot.indexOf('externalAttachmentId=b'));
+    expect(updates[1]?.values.status).toBe('completed');
+  });
+
+  it('blocks unknown models when attachment forwarding is requested', async () => {
+    const unknownModel = 'gateway/unknown-multimodal';
+    const attachments = [createAttachment()];
+    const { supabase, updates } = createSupabaseMock();
+    const { deps, state } = createDeps();
+    const params = createParams({
+      judge: {
+        id: 'judge-unknown',
+        name: 'Judge Unknown',
+        system_prompt: 'Be precise.',
+        model: unknownModel,
+      },
+      attachmentForwarding: true,
+      attachments,
+    });
+    const blockedReason = `Model ${unknownModel} is not configured to accept forwarded attachments.`;
+
+    let caughtError: unknown;
+    await evaluateSingle(supabase, params, deps).catch((error) => {
+      caughtError = error;
+    });
+
+    expect(caughtError).toBeInstanceOf(EvaluationPlanError);
+    expect((caughtError as Error).message).toBe(blockedReason);
+    expect(state.generateCalls).toHaveLength(0);
+    expect(updates).toHaveLength(2);
+    expect(updates[1]?.values).toMatchObject({
+      status: 'error',
+      model_used: unknownModel,
+      error_message: blockedReason,
+    });
+    expect((updates[1]?.values.prompt_snapshot as string)).toContain('Plan: blocked');
+    expect((updates[1]?.values.prompt_snapshot as string)).toContain('Forwarding requested: yes');
+  });
+
+  it('blocks unsupported media types when attachments are forwarded', async () => {
+    const attachments = [createAttachment({ mediaType: 'video/mp4', externalAttachmentId: 'video-1' })];
+    const { supabase, updates } = createSupabaseMock();
+    const { deps, state } = createDeps();
+    const supportedModel = 'gateway/multimodal-model';
+    const params = createParams({
+      judge: {
+        id: 'judge-vision',
+        name: 'Judge Vision',
+        system_prompt: 'Be precise.',
+        model: supportedModel,
+      },
+      attachmentForwarding: true,
+      attachments,
+    });
+    const blockedReason = `Attachment ${attachments[0].externalAttachmentId} uses unsupported media type ${attachments[0].mediaType} for model ${supportedModel}. Supported types: image/png, image/jpeg.`;
+
+    await expect(evaluateSingle(supabase, params, deps)).rejects.toThrow(blockedReason);
+
+    expect(state.generateCalls).toHaveLength(0);
+    expect(updates[1]?.values).toMatchObject({
+      status: 'error',
+      error_message: blockedReason,
+    });
+  });
+
+  it('blocks malformed attachment metadata before provider invocation', async () => {
+    const malformed = createAttachment({ fileName: '' });
+    const { supabase, updates } = createSupabaseMock();
+    const { deps, state } = createDeps();
+    const params = createParams({
+      judge: {
+        id: 'judge-vision',
+        name: 'Judge Vision',
+        system_prompt: 'Be precise.',
+        model: 'gateway/multimodal-model',
+      },
+      attachmentForwarding: true,
+      attachments: [malformed],
+    });
+    const blockedReason = `Attachment ${malformed.externalAttachmentId} missing fileName.`;
+
+    await expect(evaluateSingle(supabase, params, deps)).rejects.toThrow(blockedReason);
+
+    expect(state.generateCalls).toHaveLength(0);
+    expect(updates[1]?.values).toMatchObject({
+      status: 'error',
+      error_message: blockedReason,
+    });
+  });
+});
+
+describe('planEvaluationRequest', () => {
+  it('returns multimodal plan for supported models and sorts the manifest entries', () => {
+    const attachments = [
+      createAttachment({ externalAttachmentId: 'z', fileName: 'z.png' }),
+      createAttachment({ externalAttachmentId: 'a', fileName: 'a.png' }),
+    ];
+    const params = createParams({
+      judge: {
+        id: 'judge-vision',
+        name: 'Judge Vision',
+        system_prompt: 'Be precise.',
+        model: 'gateway/multimodal-model',
+      },
+      attachmentForwarding: true,
+      attachments,
+    });
+
+    const plan = planEvaluationRequest(params);
+
+    expect(plan.kind).toBe('multimodal');
+    expect(plan.supportedMedia).toEqual(['image/png', 'image/jpeg']);
+    expect(plan.manifestText.indexOf('externalAttachmentId=a')).toBeLessThan(
+      plan.manifestText.indexOf('externalAttachmentId=z')
+    );
+    expect(plan.manifestText).toContain('fileName=a.png');
   });
 });
