@@ -290,3 +290,53 @@ describe('derived assignment state', () => {
     ]);
   });
 });
+
+describe('attachment forwarding state', () => {
+  it('preserves explicit attachment_forwarding values through parse and hydration', () => {
+    const assignments = parseQueueAssignmentList([
+      makeAssignment({ attachment_forwarding: true }),
+    ]);
+
+    expect(assignments[0].attachment_forwarding).toBe(true);
+
+    const hydrated = hydrateQuestionsWithAssignments(
+      [
+        {
+          id: 'question-1',
+          external_id: 'Q1',
+          question_text: 'How would you answer?',
+          question_type: 'short_text',
+          created_at: '2026-03-28T00:00:00.000Z',
+        },
+      ],
+      assignments
+    );
+
+    expect(hydrated[0].assignments[0].attachment_forwarding).toBe(true);
+  });
+
+  it('defaults missing attachment_forwarding payloads to false while keeping hydration aligned', () => {
+    const rowWithoutField = makeAssignment();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    delete (rowWithoutField as any).attachment_forwarding;
+
+    const assignments = parseQueueAssignmentList([rowWithoutField]);
+
+    expect(assignments[0].attachment_forwarding).toBe(false);
+
+    const hydrated = hydrateQuestionsWithAssignments(
+      [
+        {
+          id: 'question-1',
+          external_id: 'Q1',
+          question_text: 'How would you answer?',
+          question_type: 'short_text',
+          created_at: '2026-03-28T00:00:00.000Z',
+        },
+      ],
+      assignments
+    );
+
+    expect(hydrated[0].assignments[0].attachment_forwarding).toBe(false);
+  });
+});

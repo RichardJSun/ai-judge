@@ -6,12 +6,21 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { CreateAssignmentSchema, DeleteAssignmentSchema } from '@/lib/validators/assignment';
 import { NextRequest, NextResponse } from 'next/server';
 
-export async function GET(
+type AssignmentsRouteDeps = {
+  createServiceClient: typeof createServiceClient;
+};
+
+const defaultDeps: AssignmentsRouteDeps = {
+  createServiceClient,
+};
+
+export async function handleGetAssignments(
   _request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
+  deps: AssignmentsRouteDeps = defaultDeps
 ) {
   const { id } = await params;
-  const supabase = createServiceClient();
+  const supabase = deps.createServiceClient();
 
   const { data, error } = await supabase
     .from('judge_assignments')
@@ -46,9 +55,10 @@ export async function GET(
   }
 }
 
-export async function POST(
+export async function handlePostAssignments(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
+  deps: AssignmentsRouteDeps = defaultDeps
 ) {
   const { id } = await params;
   const body = await request.json();
@@ -57,7 +67,7 @@ export async function POST(
     return NextResponse.json({ error: parsed.error.issues }, { status: 422 });
   }
 
-  const supabase = createServiceClient();
+  const supabase = deps.createServiceClient();
   const { data, error } = await supabase
     .from('judge_assignments')
     .upsert(
@@ -83,9 +93,10 @@ export async function POST(
   return NextResponse.json(data, { status: 201 });
 }
 
-export async function DELETE(
+export async function handleDeleteAssignments(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
+  deps: AssignmentsRouteDeps = defaultDeps
 ) {
   const { id } = await params;
   const body = await request.json();
@@ -94,7 +105,7 @@ export async function DELETE(
     return NextResponse.json({ error: parsed.error.issues }, { status: 422 });
   }
 
-  const supabase = createServiceClient();
+  const supabase = deps.createServiceClient();
   const { error } = await supabase
     .from('judge_assignments')
     .delete()
@@ -110,4 +121,25 @@ export async function DELETE(
   }
 
   return new NextResponse(null, { status: 204 });
+}
+
+export async function GET(
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
+  return handleGetAssignments(request, context);
+}
+
+export async function POST(
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
+  return handlePostAssignments(request, context);
+}
+
+export async function DELETE(
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
+  return handleDeleteAssignments(request, context);
 }
