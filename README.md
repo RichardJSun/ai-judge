@@ -104,6 +104,37 @@ What they prove:
 
 All four commands require a reachable Next.js app at `--base-url`. If you do not pass the flag, the scripts only fall back to `BASE_URL` when that env var is set.
 
+## Attachment-backed launchability checklist
+
+### Required prerequisites
+- Apply `supabase/migrations/0002_submission_attachments.sql` to every Supabase instance the verifier targets. The S04 proof reads the extra columns/tables before it can claim attachment persistence, so a missing migration stops the verifier during schema readiness. Run `bunx supabase db push` or paste the SQL into the Supabase SQL editor for the project named in your env vars.
+- Make sure the private storage bucket `submission-attachments` exists and is writable. Local Supabase users can run `bunx supabase storage list --bucket submission-attachments` to confirm. If it is missing, recreate it with `bunx supabase storage create-bucket submission-attachments` (or the equivalent Supabase UI action) before rerunning the verifier.
+- Set the env vars that the verifier scripts expect:
+  - `NEXT_PUBLIC_SUPABASE_URL` (or rely on `bunx supabase status -o env` output for the local stack).
+  - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` (branch compatibility for the reviewer UI).
+  - `SUPABASE_SERVICE_ROLE_KEY` or `SUPABASE_SECRET_KEY` (server-side key used by S03/S04 verifiers).
+  - `AI_GATEWAY_API_KEY` plus `AI_GATEWAY_BASE_URL` (defaults to `https://ai-gateway.vercel.sh/v3/ai`).
+  - Optional overrides: `S03_VERIFY_MODEL` and `S04_VERIFY_MODEL` if your preferred multimodal provider differs from `openai/gpt-4o-mini`. Spell each name exactly — wrong env names are a common failure mode.
+- Keep a local Supabase CLI installation handy (`supabase` at `bunx supabase`). The verifier uses `bunx supabase status -o env` to auto-detect `SUPABASE_URL` and service-role keys when running against the local stack. If that command fails, start the CLI (`bunx supabase start`), ensure the background Postgres/PostgREST services are running, and re-run the verifier with the env dump piped into `.env.local`.
+
+### Recommended verification order (S01 → S04)
+1. Run `bun run verify:m005-s01 -- --base-url http://localhost:3000` to reproduce the deterministic fixture that uploads attachments and emits the queue/submission coordinates later proofs rely on. Without this fixture, S04 may not find the expected attachment rows.
+2. Run the S02/S03 proofs (`bun run verify:m005-s02` followed by `bun run verify:m005-s03 -- --base-url http://localhost:3000`) to re-prove that assignment forwarding, prompt_snapshot, and auth filtering are stable and to emit the queue/judge/assignment identifiers that S04 reuses. The S04 verifier assumes those identifiers exist and that the reviewer flow is queue-scoped rather than run-scoped, so use the `results` API URL it spits out if you need to isolate the latest proof.
+3. Finally run `bun run verify:s04-live -- --base-url http://localhost:3000`. This command performs the upload → judges → assignment → run → results workflow and prints the `OK` line with queue, judge, run, results, and inspection URLs.
+
+The docs above reuse the S01–S03 proof targets because they form the deterministic path that the attachment-backed verifier covers. When browsing the reviewer history after multiple runs, prefer the filtered URLs from the emitted `Inspect`/`APIs` lines, since the visible pages (`/queues/…/results`, `/queues/…/assign`) always show queue-level history.
+
+### Browser/UAT follow-up checklist
+- Copy the inspection URLs from the `OK` line the verifier prints (valid/invalid judge, assign, results, queue/queues, run, APIs). Open them in a browser to confirm reviewer ceremonies, not just the API response.
+- On `/queues/:queueId/submissions/:submissionId`, confirm the stored attachment filename renders, the copy `Stored` or `Durable storage succeeded for this attachment.` appears, and the raw blob bytes are redacted in the HTML (the API already returns a sanitized `attachments` array). This proves the sticky attachment metadata is reviewer-visible.
+- On `/queues/:queueId/assignments`, ensure the verifier judge row shows the `attachment_forwarding` toggle and that the visible copy reflects the forwarding state (`Forward stored attachments when enabled`). This demonstrates that assignment-level forwarding is surfaced to reviewers.
+- Open the emitted `results` page and API URL. Verify the table still shows attachments/prompt_snapshot details for each evaluation row, that attachment-aware errors appear (blocked rows include `error_message` and `prompt_snapshot`), and that the filters isolate the current proof (use the filtered API URL when you need run-scoped evidence).
+
+### Recovery guidance for common blockers
+- **Missing migration or storage bucket** → rerun `bunx supabase db push` and `bunx supabase storage create-bucket submission-attachments`. After these succeed, reapply the S01 fixture (`bun run verify:m005-s01 …`) so the stored attachments actually exist.
+- **Supabase mismatch (local vs hosted)** → run `bunx supabase status -o env` and compare the output to your `.env.local`. If they differ, copy the CLI env block into `.env.local` so the verifier and Next.js app point at the same cluster. Restart the local Supabase stack (`bunx supabase start`) if the CLI is unavailable.
+- **Unavailable multimodal model** → set `S03_VERIFY_MODEL` and `S04_VERIFY_MODEL` to a model ID that your AI Gateway supports (e.g., `openai/gpt-4o-mini` or a locally hosted custom model). The verifiers log which model they try to run, so inspect their stdout when the model fails and correct the env override before rerunning.
+
 ## S04 Final Conformance Walkthrough
 
 Use this when you need the final handoff proof from a fresh context window.
