@@ -29,9 +29,9 @@ What each runtime boundary is responsible for:
 - `src/app/api/queues/[id]/runs/route.ts` loads active assignments, submissions, and answers from Supabase, then calls `startRun` and schedules background work with `after()`.
 - `src/lib/run/start-run.ts` validates the queue state, inserts `evaluation_runs`, inserts pending `evaluations`, and returns the concrete tasks that should be executed.
 - `src/lib/run/execute-run.ts` runs those tasks with `runWithConcurrency(..., 5)`, increments completed or errored counters, and finalizes the run as `completed` or `error` from the persisted summary.
-- `src/lib/ai/evaluator.ts` calls the AI Gateway through AI SDK structured output and stores verdict, reasoning, retry count, token usage, latency, and error text on each evaluation row.
-- `src/app/api/queues/[id]/results/route.ts` returns the queue-scoped results contract used by the reviewer UI. Judge, question, and verdict filters apply consistently to the row list, `passRate`, and `judgePassRates`.
-- `src/app/queues/[queueId]/results/page.tsx` fetches judges, questions, and results in parallel and renders the visible reviewer table with Submission, Question, Judge, Verdict, Reasoning, and Created as primary fields.
+- `src/lib/ai/evaluator.ts` calls the AI Gateway through AI SDK structured output, gates stored attachments by model capability, writes a machine-parseable `Plan marker:` line into `prompt_snapshot`, and stores verdict, reasoning, retry count, token usage, latency, and error text on each evaluation row.
+- `src/app/api/queues/[id]/results/route.ts` returns the queue-scoped results contract used by the reviewer UI. Judge, question, and verdict filters apply consistently to the row list, `passRate`, and `judgePassRates`, and each evaluation includes `prompt_snapshot` for audit proof.
+- `src/app/queues/[queueId]/results/page.tsx` fetches judges, questions, and results in parallel and renders the visible reviewer table with Submission, Question, Judge, Verdict, Reasoning, and Created as primary fields, with expandable audit details for model, retries, prompt snapshot, plan marker, and blocked diagnostics.
 
 ## Environment Variables
 
@@ -51,7 +51,7 @@ Notes:
 - `SUPABASE_SECRET_KEY` is the preferred server-side key name used by the app and live verifiers. `SUPABASE_SERVICE_ROLE_KEY` is also accepted as a fallback.
 - `AI_GATEWAY_BASE_URL` is an override knob. Keep the default Vercel AI Gateway URL unless you intentionally route through a different compatible endpoint.
 - `AI_GATEWAY_API_KEY` is required for real judge execution.
-- `S03_VERIFY_MODEL` is optional and affects the attachment-capable S03/S04 verifier lanes. If unset, those lanes use `openai/gpt-4o-mini`, while the S03 text-only lane uses `openai/gpt-oss-120b`.
+- `S03_VERIFY_MODEL` and `S04_VERIFY_MODEL` are optional verifier overrides for the attachment-capable proof lanes. If unset, those lanes use `openai/gpt-4o-mini`, while the S03 text-only lane uses `openai/gpt-oss-120b`.
 
 ## Local Setup
 
@@ -66,7 +66,7 @@ Notes:
    - **Hosted Supabase:** set the env vars above in `.env.local`.
    - **Local Supabase:** run your local Supabase stack however you normally manage it. When the verifiers target `http://localhost:3000`, they will try to read credentials from `bunx supabase status -o env` before falling back to `.env.local`.
 
-3. Apply the schema in `supabase/migrations/0001_initial.sql` to the same Supabase project.
+3. Apply the schema in `supabase/migrations/` to the same Supabase project.
 
    - If your Supabase CLI project is already configured, run:
 
@@ -74,7 +74,7 @@ Notes:
      bunx supabase db push
      ```
 
-   - Otherwise, apply `supabase/migrations/0001_initial.sql` in the Supabase SQL editor for the project referenced by your env vars.
+   - Otherwise, apply both `supabase/migrations/0001_initial.sql` and `supabase/migrations/0002_submission_attachments.sql` in the Supabase SQL editor for the project referenced by your env vars.
 
 4. Start the Next.js app.
 
@@ -86,23 +86,23 @@ Notes:
 
 ## Proof Commands
 
-With the local app running, the slice verifiers exercise the real workflow against persisted data:
+With the local app running, the current attachment-backed proof path is:
 
 ```bash
-bun run verify:s01-live -- --base-url http://localhost:3000
-bun run verify:s02-live -- --base-url http://localhost:3000
+bun run verify:m005-s01 -- --base-url http://localhost:3000
+bun run verify:m005-s02 -- --base-url http://localhost:3000
 bun run verify:m005-s03 -- --base-url http://localhost:3000 --timeout-ms 180000
 bun run verify:s04-live -- --base-url http://localhost:3000 --timeout-ms 180000
 ```
 
 What they prove:
 
-- `verify:s01-live` checks upload, run preview, run start, run polling, and persisted evaluation audit basics.
-- `verify:s02-live` checks upload/assignment/run wiring and the reviewer-facing judges lifecycle surface.
-- `verify:m005-s03` checks the queue results workflow end to end, including real results persistence, judge/question/verdict filters, pass-rate aggregation, readiness and poll budgets, and the reviewer audit evidence (plan markers, blocked diagnostics, and the filtered results API) that proves supported, disabled, and blocked paths.
-- `verify:s04-live` proves the full spec-ordered reviewer walkthrough end to end: upload → judges CRUD → assignment → run → results. It still emits the concrete queue, judge, question, assignment, run, page, and filtered API targets that a reviewer can copy directly into a browser follow-up.
+- `verify:m005-s01` uploads the deterministic attachment fixture, verifies persisted `submission_attachments` rows plus durable storage reachability, and emits the queue/submission/detail coordinates reused downstream.
+- `verify:m005-s02` proves assignment-level `attachment_forwarding` persistence on the attachment-backed queue with a real `false -> true -> false` cycle and emits the assign/detail/API URLs needed for browser follow-up.
+- `verify:m005-s03` proves the attachment-aware evaluator path end to end, including text-only, multimodal, and blocked scenarios, `prompt_snapshot`/`Plan marker` audit truth, and the filtered results API evidence for the current proof batch.
+- `verify:s04-live` proves the full reviewer walkthrough end to end: upload → judges CRUD → assignment persistence → run → results → submission detail, and emits the concrete queue, judge, question, assignment, run, page, and filtered API targets for browser/UAT follow-up.
 
-Both `verify:m005-s03` and `verify:s04-live` now surface the readiness/poll budgets (`env-readiness`, `schema-readiness`, `storage-readiness`, `model-readiness`, `results-poll`) so you know immediately whether migrations, storage buckets, env knobs, or the chosen model are blocking the proof before the expensive upload/run phases start. Tune the `--timeout-ms`/`--poll-ms` overrides (or the `M005_S03_VERIFY_*` and `S04_VERIFY_*` env vars) if a phase consistently exhausts its budget, and copy the filtered `results` API URL from the command output whenever you need run-scoped evidence.
+`verify:m005-s03` and `verify:s04-live` surface the readiness and poll phases (`env-readiness`, `schema-readiness`, `storage-readiness`, `model-readiness`, `results-poll`) so you know immediately whether migrations, storage buckets, env knobs, or the chosen model are blocking the proof before the expensive upload/run phases start. Tune the `--timeout-ms`/`--poll-ms` overrides (or the `M005_S02_VERIFY_*`, `M005_S03_VERIFY_*`, and `S04_VERIFY_*` env vars) if a phase consistently exhausts its budget, and copy the emitted filtered `results` API URL whenever you need run-scoped evidence on a queue-scoped page.
 
 All four commands require a reachable Next.js app at `--base-url`. If you do not pass the flag, the scripts only fall back to `BASE_URL` when that env var is set.
 
@@ -130,7 +130,7 @@ The docs above reuse the S01–S03 proof targets because they form the determini
 ### Browser/UAT follow-up checklist
 - Copy the inspection URLs from the `OK` line the verifier prints (valid/invalid judge, assign, results, queue/queues, run, APIs). Open them in a browser to confirm reviewer ceremonies, not just the API response.
 - On `/queues/:queueId/submissions/:submissionId`, confirm the stored attachment filename renders, the copy `Stored` or `Durable storage succeeded for this attachment.` appears, and the raw blob bytes are redacted in the HTML (the API already returns a sanitized `attachments` array). This proves the sticky attachment metadata is reviewer-visible.
-- On `/queues/:queueId/assignments`, ensure the verifier judge row shows the `attachment_forwarding` toggle and that the visible copy reflects the forwarding state (`Forward stored attachments when enabled`). This demonstrates that assignment-level forwarding is surfaced to reviewers.
+- On `/queues/:queueId/assign`, ensure the verifier judge row shows the `attachment_forwarding` toggle and that the visible copy reflects the forwarding state (`Forward stored attachments when enabled`). This demonstrates that assignment-level forwarding is surfaced to reviewers.
 - Open the emitted `results` page and API URL. Verify the table still shows attachments/prompt_snapshot details for each evaluation row, that attachment-aware errors appear (blocked rows include `error_message` and `prompt_snapshot`), and that the filters isolate the current proof (use the filtered API URL when you need run-scoped evidence).
 
 ### Recovery guidance for common blockers
@@ -192,10 +192,10 @@ The judge form is free-solo, so you can also type another AI Gateway-compatible 
 
 1. **Upload submissions** — open `http://localhost:3000`, which redirects to `/upload`, and upload a JSON file containing one or more queues.
 2. **Create judges** — go to `/judges` and add at least one active judge with a system prompt and model.
-3. **Assign judges to a queue** — open the queue from `/queues`, click **Assign Judges**, and save question-to-judge assignments.
+3. **Assign judges to a queue** — open the queue from `/queues`, click **Assign Judges**, save question-to-judge assignments, and enable **Forward stored attachments** on the assignments that should send persisted files to supported models.
 4. **Preview and start a run** — from the queue page click **Run Evaluations**, confirm the preview, and start the run. The route returns immediately after `startRun` persists the work and `after()` schedules `executeRun`.
 5. **Watch run progress** — stay on `/queues/[queueId]/run` until the run reaches `completed` or `error`. The progress page polls persisted counters and warns when some evaluations fail.
-6. **Inspect reviewer results** — click **View Results** to open `/queues/[queueId]/results`. Use the judge, question, and verdict filters; confirm the pass-rate card and per-judge chart; and review the table rows with Submission, Question, Judge, Verdict, Reasoning, and Created. Expand rows for audit detail such as model, tokens, latency, retries, and error text.
+6. **Inspect reviewer results** — click **View Results** to open `/queues/[queueId]/results`. Use the judge, question, and verdict filters; confirm the pass-rate card and per-judge chart; review the table rows with Submission, Question, Judge, Verdict, Reasoning, and Created; and expand rows for audit detail such as model, tokens, latency, retries, `prompt_snapshot`, `Plan marker`, and blocked diagnostics.
 
 ## Trade-offs
 
@@ -215,6 +215,6 @@ The results API and page intentionally show queue history instead of only the la
 
 The run page polls `/api/queues/[id]/runs/[runId]` for progress instead of subscribing to Supabase Realtime. That keeps the runtime smaller and easier to reason about, but it is less reactive than a live subscription model.
 
-### Attachment forwarding is still not wired end to end
+### Attachment forwarding is capability-gated, not universal
 
-`judge_assignments` already carry `attachment_forwarding`, but uploads and evaluation execution still operate on JSON answers only. Multimodal file forwarding is a future enhancement, not part of the current verified path.
+Attachment forwarding is wired end to end now, but only for persisted stored attachments on assignments that opt in and models that the evaluator considers forwarding-capable. Unsupported models or media types do not silently downgrade to a fake multimodal pass; they surface blocked diagnostics in `prompt_snapshot`, the results API, the reviewer results audit pane, and the S03/S04 verifier output.
