@@ -141,10 +141,12 @@ export default function SubmissionDetailPage({
 }) {
   const { queueId, submissionId } = use(params);
   const { source } = use(searchParams);
+  const navigationSource = parseSubmissionDetailNavigationSource(source);
   const router = useRouter();
+  const queryKey = getSubmissionDetailQueryKey(queueId, submissionId);
 
   const query = useQuery<SubmissionDetailResponse, Error>({
-    queryKey: getSubmissionDetailQueryKey(queueId, submissionId),
+    queryKey,
     queryFn: () => fetchSubmissionDetail(queueId, submissionId),
     retry: false,
   });
@@ -159,7 +161,7 @@ export default function SubmissionDetailPage({
       onBack={() =>
         handleSubmissionDetailBack({
           queueId,
-          source: parseSubmissionDetailNavigationSource(source),
+          source: navigationSource,
           router,
           historyLength: typeof window === 'undefined' ? 0 : window.history.length,
         })

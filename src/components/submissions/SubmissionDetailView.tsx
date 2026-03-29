@@ -12,7 +12,12 @@ import {
     Typography,
 } from '@mui/material';
 import { useId, useState } from 'react';
-import type { SubmissionDetailAnswer, SubmissionDetailQuestion, SubmissionDetailResponse } from '@/types/api';
+import type {
+    SubmissionDetailAnswer,
+    SubmissionDetailAttachment,
+    SubmissionDetailQuestion,
+    SubmissionDetailResponse,
+} from '@/types/api';
 
 export interface SubmissionDetailViewProps {
     detail: SubmissionDetailResponse;
@@ -51,6 +56,39 @@ function formatAnswer(answer: SubmissionDetailAnswer) {
 
 function formatRawAnswer(rawAnswer: Record<string, unknown>) {
     return JSON.stringify(rawAnswer, null, 2);
+}
+
+function getAttachmentStatusLabel(status: SubmissionDetailAttachment['storage_status']) {
+    switch (status) {
+        case 'stored':
+            return 'Stored';
+        case 'unavailable':
+            return 'Unavailable';
+        case 'error':
+            return 'Storage error';
+    }
+}
+
+function getAttachmentStatusColor(status: SubmissionDetailAttachment['storage_status']) {
+    switch (status) {
+        case 'stored':
+            return 'success' as const;
+        case 'unavailable':
+            return 'warning' as const;
+        case 'error':
+            return 'error' as const;
+    }
+}
+
+function getAttachmentStatusDescription(status: SubmissionDetailAttachment['storage_status']) {
+    switch (status) {
+        case 'stored':
+            return 'Durable storage succeeded for this attachment.';
+        case 'unavailable':
+            return 'Attachment metadata was captured, but the durable file is currently unavailable.';
+        case 'error':
+            return 'Attachment metadata was captured, but durable storage reported an error.';
+    }
 }
 
 function MetadataField({
@@ -160,6 +198,77 @@ function RawPayloadDisclosure({ question }: { question: SubmissionDetailQuestion
     );
 }
 
+function AttachmentStatusChip({ attachment }: { attachment: SubmissionDetailAttachment }) {
+    return (
+        <Chip
+            label={getAttachmentStatusLabel(attachment.storage_status)}
+            color={getAttachmentStatusColor(attachment.storage_status)}
+            size="small"
+            variant="outlined"
+        />
+    );
+}
+
+function AttachmentCard({ attachment }: { attachment: SubmissionDetailAttachment }) {
+    return (
+        <Paper component="li" variant="outlined" sx={{ p: 2, listStyle: 'none' }}>
+            <Stack spacing={1.5}>
+                <Stack
+                    direction={{ xs: 'column', sm: 'row' }}
+                    spacing={1}
+                    alignItems={{ xs: 'flex-start', sm: 'center' }}
+                    justifyContent="space-between"
+                >
+                    <Box minWidth={0}>
+                        <Typography variant="subtitle1" fontWeight={600} sx={{ overflowWrap: 'anywhere' }}>
+                            {attachment.file_name}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary" sx={{ overflowWrap: 'anywhere' }}>
+                            {attachment.media_type}
+                        </Typography>
+                    </Box>
+                    <AttachmentStatusChip attachment={attachment} />
+                </Stack>
+
+                <Typography variant="body2" color="text.secondary" sx={{ overflowWrap: 'anywhere' }}>
+                    {getAttachmentStatusDescription(attachment.storage_status)}
+                </Typography>
+            </Stack>
+        </Paper>
+    );
+}
+
+function AttachmentSection({ attachments }: { attachments: SubmissionDetailAttachment[] }) {
+    const headingId = useId();
+
+    return (
+        <Paper component="section" variant="outlined" sx={{ p: 2.5 }} aria-labelledby={headingId}>
+            <Stack spacing={2}>
+                <Box>
+                    <Typography id={headingId} variant="h5" fontWeight={600}>
+                        Attachments
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                        Reviewer-safe attachment metadata and durable storage status captured with this submission.
+                    </Typography>
+                </Box>
+
+                {attachments.length === 0 ? (
+                    <Typography color="text.secondary">
+                        No attachments were included with this submission.
+                    </Typography>
+                ) : (
+                    <Stack component="ul" spacing={1.5} sx={{ m: 0, p: 0 }} aria-label="Submission attachments">
+                        {attachments.map((attachment) => (
+                            <AttachmentCard key={attachment.id} attachment={attachment} />
+                        ))}
+                    </Stack>
+                )}
+            </Stack>
+        </Paper>
+    );
+}
+
 function QuestionCard({ question, index }: { question: SubmissionDetailQuestion; index: number }) {
     return (
         <Paper variant="outlined" sx={{ p: 2.5 }}>
@@ -230,6 +339,8 @@ export default function SubmissionDetailView({ detail }: SubmissionDetailViewPro
                     </Stack>
                 </Stack>
             </Paper>
+
+            <AttachmentSection attachments={detail.attachments} />
 
             {detail.questions.length === 0 ? (
                 <Paper variant="outlined" sx={{ p: 3 }}>

@@ -149,6 +149,16 @@ describe('parseSubmissionDetailResponse', () => {
             storage_status: 'stored',
             storage_error: null,
           },
+          {
+            id: 'attachment-row-2',
+            external_attachment_id: 'attachment-external-2',
+            source_kind: 'inline_base64',
+            file_name: 'missing.txt',
+            media_type: 'text/plain',
+            byte_size: 64,
+            storage_status: 'unavailable',
+            storage_error: 'Attachment metadata exists but the durable file could not be confirmed.',
+          },
         ],
       })
     ).toEqual({
@@ -202,6 +212,16 @@ describe('parseSubmissionDetailResponse', () => {
           byte_size: 1024,
           storage_status: 'stored',
           storage_error: null,
+        },
+        {
+          id: 'attachment-row-2',
+          external_attachment_id: 'attachment-external-2',
+          source_kind: 'inline_base64',
+          file_name: 'missing.txt',
+          media_type: 'text/plain',
+          byte_size: 64,
+          storage_status: 'unavailable',
+          storage_error: 'Attachment metadata exists but the durable file could not be confirmed.',
         },
       ],
     });
@@ -257,7 +277,7 @@ describe('parseSubmissionDetailResponse', () => {
     ).toThrow(/Malformed submission detail response: /);
   });
 
-  it('rejects malformed attachment entries', () => {
+  it('rejects malformed attachment entries with missing required fields', () => {
     expect(() =>
       parseSubmissionDetailResponse({
         queue: {
@@ -284,11 +304,113 @@ describe('parseSubmissionDetailResponse', () => {
             id: 'attachment-row-1',
             external_attachment_id: 'attachment-external-1',
             source_kind: 'inline_base64',
-            file_name: '',
             media_type: 'application/pdf',
             byte_size: 1024,
             storage_status: 'stored',
             storage_error: null,
+          },
+        ],
+      })
+    ).toThrow(/Malformed submission detail response: /);
+  });
+
+  it('rejects null attachment metadata entries', () => {
+    expect(() =>
+      parseSubmissionDetailResponse({
+        queue: {
+          id: 'queue-1',
+          queue_id: 'queue-external-1',
+          created_at: '2026-03-28T10:00:00.000Z',
+        },
+        submission: {
+          id: 'submission-1',
+          queue_id: 'queue-1',
+          external_id: 'submission-external-1',
+          labeling_task_id: null,
+          submitted_at: null,
+          created_at: '2026-03-28T10:05:00.000Z',
+        },
+        summary: {
+          totalQuestions: 0,
+          answeredQuestions: 0,
+          missingQuestions: 0,
+        },
+        questions: [],
+        attachments: [null],
+      })
+    ).toThrow(/Malformed submission detail response: /);
+  });
+
+  it('rejects invalid attachment status values', () => {
+    expect(() =>
+      parseSubmissionDetailResponse({
+        queue: {
+          id: 'queue-1',
+          queue_id: 'queue-external-1',
+          created_at: '2026-03-28T10:00:00.000Z',
+        },
+        submission: {
+          id: 'submission-1',
+          queue_id: 'queue-1',
+          external_id: 'submission-external-1',
+          labeling_task_id: null,
+          submitted_at: null,
+          created_at: '2026-03-28T10:05:00.000Z',
+        },
+        summary: {
+          totalQuestions: 0,
+          answeredQuestions: 0,
+          missingQuestions: 0,
+        },
+        questions: [],
+        attachments: [
+          {
+            id: 'attachment-row-1',
+            external_attachment_id: 'attachment-external-1',
+            source_kind: 'inline_base64',
+            file_name: 'evidence.pdf',
+            media_type: 'application/pdf',
+            byte_size: 1024,
+            storage_status: 'pending',
+            storage_error: null,
+          },
+        ],
+      })
+    ).toThrow(/Malformed submission detail response: /);
+  });
+
+  it('rejects impossible stored attachment error combinations', () => {
+    expect(() =>
+      parseSubmissionDetailResponse({
+        queue: {
+          id: 'queue-1',
+          queue_id: 'queue-external-1',
+          created_at: '2026-03-28T10:00:00.000Z',
+        },
+        submission: {
+          id: 'submission-1',
+          queue_id: 'queue-1',
+          external_id: 'submission-external-1',
+          labeling_task_id: null,
+          submitted_at: null,
+          created_at: '2026-03-28T10:05:00.000Z',
+        },
+        summary: {
+          totalQuestions: 0,
+          answeredQuestions: 0,
+          missingQuestions: 0,
+        },
+        questions: [],
+        attachments: [
+          {
+            id: 'attachment-row-1',
+            external_attachment_id: 'attachment-external-1',
+            source_kind: 'inline_base64',
+            file_name: 'evidence.pdf',
+            media_type: 'application/pdf',
+            byte_size: 1024,
+            storage_status: 'stored',
+            storage_error: 'Stored attachments cannot report an error.',
           },
         ],
       })

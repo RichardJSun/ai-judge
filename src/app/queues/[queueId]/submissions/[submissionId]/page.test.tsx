@@ -120,6 +120,37 @@ describe('submission detail page helpers', () => {
     );
   });
 
+  it('rejects malformed attachment payloads before the page can render them', async () => {
+    globalThis.fetch = mock(
+      async () =>
+        new Response(
+          JSON.stringify({
+            ...createDetailResponse(),
+            attachments: [
+              {
+                id: 'attachment-1',
+                external_attachment_id: 'ATT-001',
+                source_kind: 'inline_base64',
+                file_name: 'evidence.pdf',
+                media_type: 'application/pdf',
+                byte_size: 1024,
+                storage_status: 'stored',
+                storage_error: 'should-not-exist',
+              },
+            ],
+          }),
+          {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          }
+        )
+    ) as unknown as typeof fetch;
+
+    await expect(fetchSubmissionDetail('queue-1', 'submission-1')).rejects.toThrow(
+      /Malformed \/api\/queues\/queue-1\/submissions\/submission-1 response: /
+    );
+  });
+
   it('treats only the constrained results marker as a results-origin visit', () => {
     expect(parseSubmissionDetailNavigationSource('results')).toBe('results');
     expect(parseSubmissionDetailNavigationSource(undefined)).toBe('queue');
@@ -227,7 +258,61 @@ describe('SubmissionDetailPageContent', () => {
     expect(html).toContain('Retry');
   });
 
-  it('renders the full ordered question set through SubmissionDetailView without reconstructing rows', () => {
+  it('renders attachment truth through SubmissionDetailView without exposing storage internals', () => {
+    const html = renderToStaticMarkup(
+      <SubmissionDetailPageContent
+        queueId="queue-1"
+        detail={{
+          ...createDetailResponse(),
+          attachments: [
+            {
+              id: 'attachment-1',
+              external_attachment_id: 'ATT-001',
+              source_kind: 'inline_base64',
+              file_name: 'review-evidence.pdf',
+              media_type: 'application/pdf',
+              byte_size: 1024,
+              storage_status: 'stored',
+              storage_error: null,
+            },
+            {
+              id: 'attachment-2',
+              external_attachment_id: 'ATT-002',
+              source_kind: 'inline_base64',
+              file_name: 'missing-reference.txt',
+              media_type: 'text/plain',
+              byte_size: 256,
+              storage_status: 'unavailable',
+              storage_error: 'private/path/that-should-not-render.txt',
+            },
+          ],
+        }}
+        isLoading={false}
+        error={null}
+        onRetry={() => undefined}
+        onBack={() => undefined}
+      />
+    );
+
+    expect(html).toContain('Submission detail');
+    expect(html).toContain('Attachments');
+    expect(html).toContain('review-evidence.pdf');
+    expect(html).toContain('application/pdf');
+    expect(html).toContain('Stored');
+    expect(html).toContain('Unavailable');
+    expect(html).toContain('Attachment metadata was captured, but the durable file is currently unavailable.');
+    expect(html).not.toContain('private/path/that-should-not-render.txt');
+
+    const firstIndex = html.indexOf('First question in queue order.');
+    const secondIndex = html.indexOf('Second question in queue order.');
+    const thirdIndex = html.indexOf('Third question in queue order.');
+
+    expect(firstIndex).toBeGreaterThan(-1);
+    expect(secondIndex).toBeGreaterThan(firstIndex);
+    expect(thirdIndex).toBeGreaterThan(secondIndex);
+  });
+
+  it('renders the explicit no-attachments state when the payload contains none', () => {
     const html = renderToStaticMarkup(
       <SubmissionDetailPageContent
         queueId="queue-1"
@@ -239,19 +324,6 @@ describe('SubmissionDetailPageContent', () => {
       />
     );
 
-    expect(html).toContain('Submission detail');
-    expect(html).toContain('QUEUE-001');
-    expect(html).toContain('SUB-001');
-
-    const firstIndex = html.indexOf('First question in queue order.');
-    const secondIndex = html.indexOf('Second question in queue order.');
-    const thirdIndex = html.indexOf('Third question in queue order.');
-
-    expect(firstIndex).toBeGreaterThan(-1);
-    expect(secondIndex).toBeGreaterThan(firstIndex);
-    expect(thirdIndex).toBeGreaterThan(secondIndex);
-    expect(html).toContain('First answer.');
-    expect(html).toContain('Structured answer recorded. Open raw payload to inspect the stored response.');
-    expect(html).toContain('No answer was submitted for this question.');
+    expect(html).toContain('No attachments were included with this submission.');
   });
 });

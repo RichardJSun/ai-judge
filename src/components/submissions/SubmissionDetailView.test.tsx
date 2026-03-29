@@ -120,6 +120,72 @@ describe('SubmissionDetailView', () => {
         expect(html).not.toContain('&quot;nested&quot;');
     });
 
+    it('renders an explicit no-attachments state instead of implying missing metadata', () => {
+        const html = renderToStaticMarkup(<SubmissionDetailView detail={createDetailResponse()} />);
+
+        expect(html).toContain('Attachments');
+        expect(html).toContain('Reviewer-safe attachment metadata and durable storage status captured with this submission.');
+        expect(html).toContain('No attachments were included with this submission.');
+    });
+
+    it('renders attachment filenames, media types, and truthful durable status copy without exposing storage internals', () => {
+        const html = renderToStaticMarkup(
+            <SubmissionDetailView
+                detail={createDetailResponse({
+                    attachments: [
+                        {
+                            id: 'attachment-1',
+                            external_attachment_id: 'ATT-001',
+                            source_kind: 'inline_base64',
+                            file_name:
+                                'this-is-a-very-long-reviewer-visible-filename-that-should-still-wrap-cleanly-without-pushing-the-layout-horizontally.pdf',
+                            media_type: 'application/pdf',
+                            byte_size: 1024,
+                            storage_status: 'stored',
+                            storage_error: null,
+                        },
+                        {
+                            id: 'attachment-2',
+                            external_attachment_id: 'ATT-002',
+                            source_kind: 'inline_base64',
+                            file_name: 'missing-reference.txt',
+                            media_type: 'text/plain',
+                            byte_size: 256,
+                            storage_status: 'unavailable',
+                            storage_error: 'submission-attachments/private/path.txt',
+                        },
+                        {
+                            id: 'attachment-3',
+                            external_attachment_id: 'ATT-003',
+                            source_kind: 'inline_base64',
+                            file_name: 'errored-image.png',
+                            media_type: 'image/png',
+                            byte_size: 2048,
+                            storage_status: 'error',
+                            storage_error: 'storage backend said no',
+                        },
+                    ],
+                })}
+            />
+        );
+
+        expect(html).toContain('Submission attachments');
+        expect(html).toContain('application/pdf');
+        expect(html).toContain('text/plain');
+        expect(html).toContain('image/png');
+        expect(html).toContain('Stored');
+        expect(html).toContain('Unavailable');
+        expect(html).toContain('Storage error');
+        expect(html).toContain('Durable storage succeeded for this attachment.');
+        expect(html).toContain('Attachment metadata was captured, but the durable file is currently unavailable.');
+        expect(html).toContain('Attachment metadata was captured, but durable storage reported an error.');
+        expect(html).toContain('this-is-a-very-long-reviewer-visible-filename-that-should-still-wrap-cleanly-without-pushing-the-layout-horizontally.pdf');
+        expect(html).not.toContain('submission-attachments/private/path.txt');
+        expect(html).not.toContain('storage backend said no');
+        expect(html).not.toContain('ATT-001');
+        expect(html).not.toContain('inline_base64');
+    });
+
     it('renders an explicit empty-question state without any disclosure affordance', () => {
         const html = renderToStaticMarkup(
             <SubmissionDetailView

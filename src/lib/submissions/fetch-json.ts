@@ -20,16 +20,26 @@ const SubmissionDetailQuestionSchema = z.object({
   rawAnswer: z.record(z.string(), z.unknown()).nullable(),
 });
 
-const SubmissionDetailAttachmentSchema = z.object({
-  id: z.string().min(1),
-  external_attachment_id: z.string().min(1),
-  source_kind: z.string().min(1),
-  file_name: z.string().min(1),
-  media_type: z.string().min(1),
-  byte_size: z.number().int().positive(),
-  storage_status: z.enum(['stored', 'unavailable', 'error']),
-  storage_error: z.string().min(1).nullable(),
-});
+const SubmissionDetailAttachmentSchema = z
+  .object({
+    id: z.string().min(1),
+    external_attachment_id: z.string().min(1),
+    source_kind: z.string().min(1),
+    file_name: z.string().min(1),
+    media_type: z.string().min(1),
+    byte_size: z.number().int().positive(),
+    storage_status: z.enum(['stored', 'unavailable', 'error']),
+    storage_error: z.string().min(1).nullable(),
+  })
+  .superRefine((value, context) => {
+    if (value.storage_status === 'stored' && value.storage_error !== null) {
+      context.addIssue({
+        code: 'custom',
+        path: ['storage_error'],
+        message: 'Stored attachments cannot report a storage_error.',
+      });
+    }
+  });
 
 const SubmissionDetailResponseSchema = z.object({
   queue: z.object({
