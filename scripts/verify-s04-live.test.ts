@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test';
+import { parsePlanMarker } from '../src/lib/ai/plan-marker';
 import {
   assertInspectionUrls,
   assertRunStartPayload,
@@ -65,6 +66,62 @@ function createSummary(overrides: Partial<LiveVerificationSummary> = {}): LiveVe
       currentErrored: 3,
       verdictFilter: 'pass',
     },
+    attachmentProof: {
+      submissionId: 'submission-uuid-1',
+      submissionExternalId: 'submission-ext-1',
+      detailUrl: 'http://localhost:3000/queues/queue-uuid-1/submissions/submission-uuid-1?source=results',
+      detailApiUrl: 'http://localhost:3000/api/queues/queue-uuid-1/submissions/submission-uuid-1',
+      attachments: [
+        {
+          id: 'attachment-uuid-1',
+          externalAttachmentId: 'external-attachment-1',
+          fileName: 'screenshot.png',
+          mediaType: 'image/png',
+          storageStatus: 'stored',
+        },
+      ],
+    },
+    assignmentForwarding: [
+      {
+        questionId: 'question-uuid-1',
+        assignmentId: 'assignment-valid-q1',
+        attachmentForwarding: true,
+      },
+      {
+        questionId: 'question-uuid-2',
+        assignmentId: 'assignment-valid-q2',
+        attachmentForwarding: false,
+      },
+    ],
+    scenarioProof: [
+      {
+        scenario: 'text-only',
+        evaluationId: 'eval-text-1',
+        status: 'completed',
+        verdict: 'pass',
+        modelUsed: 'gateway/text-only-model',
+        promptSnapshot: 'Forwarding requested: no\nPlan: text-only\nPlan marker: {"version":1,"kind":"text-only","forwardingRequested":false}',
+        errorMessage: null,
+      },
+      {
+        scenario: 'multimodal',
+        evaluationId: 'eval-multi-1',
+        status: 'completed',
+        verdict: 'pass',
+        modelUsed: 'gateway/multimodal-model',
+        promptSnapshot: 'Forwarding requested: yes\nPlan: multimodal\nPlan marker: {"version":1,"kind":"multimodal","forwardingRequested":true,"supportedMedia":["image/png","image/jpeg"]}',
+        errorMessage: null,
+      },
+      {
+        scenario: 'blocked',
+        evaluationId: 'eval-blocked-1',
+        status: 'error',
+        verdict: null,
+        modelUsed: 'gateway/multimodal-model',
+        promptSnapshot: 'Forwarding requested: yes\nPlan: blocked\nPlan marker: {"version":1,"kind":"blocked","forwardingRequested":true,"blockedReason":"forwarding disabled"}',
+        errorMessage: 'forwarding disabled',
+      },
+    ],
     inspectionUrls: {
       queues: 'http://localhost:3000/queues',
       queueDetail: 'http://localhost:3000/queues/queue-uuid-1',
@@ -74,12 +131,14 @@ function createSummary(overrides: Partial<LiveVerificationSummary> = {}): LiveVe
       assign: 'http://localhost:3000/queues/queue-uuid-1/assign',
       run: 'http://localhost:3000/queues/queue-uuid-1/run',
       results: 'http://localhost:3000/queues/queue-uuid-1/results',
+      submissionDetail: 'http://localhost:3000/queues/queue-uuid-1/submissions/submission-uuid-1?source=results',
     },
     apiUrls: {
       runPreview: 'http://localhost:3000/api/queues/queue-uuid-1/run-preview',
       runStart: 'http://localhost:3000/api/queues/queue-uuid-1/runs',
       runProgress: 'http://localhost:3000/api/queues/queue-uuid-1/runs/run-uuid-1',
       results: 'http://localhost:3000/api/queues/queue-uuid-1/results?page=1&judgeId=judge-valid-uuid-1&judgeId=judge-invalid-uuid-1',
+      submissionDetail: 'http://localhost:3000/api/queues/queue-uuid-1/submissions/submission-uuid-1',
     },
     ...overrides,
   };
@@ -151,7 +210,7 @@ describe('run start helpers', () => {
 
 describe('summary helpers', () => {
   it('builds canonical inspection URLs for downstream browser checks', () => {
-    expect(buildInspectionUrls('http://localhost:3000/', 'queue-uuid-1', 'judge-valid-uuid-1', 'judge-invalid-uuid-1')).toEqual({
+    expect(buildInspectionUrls('http://localhost:3000/', 'queue-uuid-1', 'judge-valid-uuid-1', 'judge-invalid-uuid-1', 'submission-uuid-1')).toEqual({
       queues: 'http://localhost:3000/queues',
       queueDetail: 'http://localhost:3000/queues/queue-uuid-1',
       judges: 'http://localhost:3000/judges',
@@ -160,6 +219,7 @@ describe('summary helpers', () => {
       assign: 'http://localhost:3000/queues/queue-uuid-1/assign',
       run: 'http://localhost:3000/queues/queue-uuid-1/run',
       results: 'http://localhost:3000/queues/queue-uuid-1/results',
+      submissionDetail: 'http://localhost:3000/queues/queue-uuid-1/submissions/submission-uuid-1?source=results',
     });
   });
 
@@ -169,13 +229,15 @@ describe('summary helpers', () => {
         'http://localhost:3000/',
         'queue-uuid-1',
         'run-uuid-1',
-        'page=1&judgeId=judge-valid-uuid-1&judgeId=judge-invalid-uuid-1'
+        'page=1&judgeId=judge-valid-uuid-1&judgeId=judge-invalid-uuid-1',
+        'submission-uuid-1'
       )
     ).toEqual({
       runPreview: 'http://localhost:3000/api/queues/queue-uuid-1/run-preview',
       runStart: 'http://localhost:3000/api/queues/queue-uuid-1/runs',
       runProgress: 'http://localhost:3000/api/queues/queue-uuid-1/runs/run-uuid-1',
       results: 'http://localhost:3000/api/queues/queue-uuid-1/results?page=1&judgeId=judge-valid-uuid-1&judgeId=judge-invalid-uuid-1',
+      submissionDetail: 'http://localhost:3000/api/queues/queue-uuid-1/submissions/submission-uuid-1',
     });
   });
 
@@ -189,20 +251,25 @@ describe('summary helpers', () => {
   });
 
   it('formats the final summary with stable queue, judge, run, and assignment identifiers', () => {
-    expect(formatSetupSummary(createSummary())).toBe(
-      'queue=queue-uuid-1 queueLabel=queue_s04_live_proof validJudge=judge-valid-uuid-1 invalidJudge=judge-invalid-uuid-1 questions=question-uuid-1:assignment-valid-q1:assignment-invalid-q1:3,question-uuid-2:assignment-valid-q2:none:3 previews=0/6/0/6 inactiveAssignments=2 run=run-uuid-1:completed:9/9:6/3/3 verdictFilter=pass results=9/6/3'
+    const summary = createSummary();
+    expect(parsePlanMarker(summary.scenarioProof[0].promptSnapshot).kind).toBe('text-only');
+    expect(parsePlanMarker(summary.scenarioProof[1].promptSnapshot).kind).toBe('multimodal');
+    expect(parsePlanMarker(summary.scenarioProof[2].promptSnapshot).kind).toBe('blocked');
+
+    expect(formatSetupSummary(summary)).toBe(
+      'queue=queue-uuid-1 queueLabel=queue_s04_live_proof validJudge=judge-valid-uuid-1 invalidJudge=judge-invalid-uuid-1 questions=question-uuid-1:assignment-valid-q1:assignment-invalid-q1:3,question-uuid-2:assignment-valid-q2:none:3 previews=0/6/0/6 inactiveAssignments=2 run=run-uuid-1:completed:9/9:6/3/3 verdictFilter=pass results=9/6/3 submission=submission-uuid-1:submission-ext-1 detailUrl=http://localhost:3000/queues/queue-uuid-1/submissions/submission-uuid-1?source=results detailApiUrl=http://localhost:3000/api/queues/queue-uuid-1/submissions/submission-uuid-1 attachments=attachment-uuid-1:screenshot.png:stored forwarding=question-uuid-1:assignment-valid-q1:forward,question-uuid-2:assignment-valid-q2:no-forward scenarios=text-only:eval-text-1:completed:gateway/text-only-model,multimodal:eval-multi-1:completed:gateway/multimodal-model,blocked:eval-blocked-1:error:gateway/multimodal-model:forwarding disabled'
     );
   });
 
   it('formats inspection targets from the assembled summary', () => {
     expect(formatInspectionTargets(createSummary())).toBe(
-      'queues=http://localhost:3000/queues queueDetail=http://localhost:3000/queues/queue-uuid-1 judges=http://localhost:3000/judges validJudgeDetail=http://localhost:3000/judges/judge-valid-uuid-1 invalidJudgeDetail=http://localhost:3000/judges/judge-invalid-uuid-1 assign=http://localhost:3000/queues/queue-uuid-1/assign run=http://localhost:3000/queues/queue-uuid-1/run results=http://localhost:3000/queues/queue-uuid-1/results'
+      'queues=http://localhost:3000/queues queueDetail=http://localhost:3000/queues/queue-uuid-1 judges=http://localhost:3000/judges validJudgeDetail=http://localhost:3000/judges/judge-valid-uuid-1 invalidJudgeDetail=http://localhost:3000/judges/judge-invalid-uuid-1 assign=http://localhost:3000/queues/queue-uuid-1/assign run=http://localhost:3000/queues/queue-uuid-1/run results=http://localhost:3000/queues/queue-uuid-1/results submissionDetail=http://localhost:3000/queues/queue-uuid-1/submissions/submission-uuid-1?source=results'
     );
   });
 
   it('formats API targets from the assembled summary', () => {
     expect(formatApiTargets(createSummary())).toBe(
-      'runPreview=http://localhost:3000/api/queues/queue-uuid-1/run-preview runStart=http://localhost:3000/api/queues/queue-uuid-1/runs runProgress=http://localhost:3000/api/queues/queue-uuid-1/runs/run-uuid-1 results=http://localhost:3000/api/queues/queue-uuid-1/results?page=1&judgeId=judge-valid-uuid-1&judgeId=judge-invalid-uuid-1'
+      'runPreview=http://localhost:3000/api/queues/queue-uuid-1/run-preview runStart=http://localhost:3000/api/queues/queue-uuid-1/runs runProgress=http://localhost:3000/api/queues/queue-uuid-1/runs/run-uuid-1 results=http://localhost:3000/api/queues/queue-uuid-1/results?page=1&judgeId=judge-valid-uuid-1&judgeId=judge-invalid-uuid-1 submissionDetail=http://localhost:3000/api/queues/queue-uuid-1/submissions/submission-uuid-1'
     );
   });
 });

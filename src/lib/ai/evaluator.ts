@@ -4,6 +4,7 @@ import type { AttachmentStorageStatusEnum } from '@/types/db';
 import { APICallError, generateText, NoObjectGeneratedError, Output } from 'ai';
 import { z } from 'zod';
 import { downloadSubmissionAttachment, type DownloadedSubmissionAttachment } from '@/lib/submissions/attachment-storage';
+import { buildPlanMarker, type EvaluationPlanKind } from './plan-marker';
 import { gateway } from './gateway';
 
 const VerdictSchema = z.object({
@@ -63,8 +64,6 @@ export interface EvaluateParams {
   attachments: EvaluationAttachment[];
 }
 
-export type EvaluationPlanKind = 'text-only' | 'multimodal' | 'blocked';
-
 export interface EvaluationPlanResult {
   kind: EvaluationPlanKind;
   manifestText: string;
@@ -74,8 +73,12 @@ export interface EvaluationPlanResult {
   forwardedAttachments: readonly EvaluationAttachment[];
 }
 
+export type { EvaluationPlanKind } from './plan-marker';
+
 const MULTIMODAL_MODEL_CAPABILITIES: Record<string, readonly string[]> = {
   'gateway/multimodal-model': ['image/png', 'image/jpeg'],
+  'openai/gpt-4o-mini': ['image/png', 'image/jpeg'],
+  'google/gemini-2.0-flash': ['image/png', 'image/jpeg'],
 };
 
 const DEFAULT_MANIFEST_TEXT = '  (none)';
@@ -176,10 +179,18 @@ export function planEvaluationRequest(params: EvaluateParams): EvaluationPlanRes
 }
 
 function buildPlanSnapshot(plan: EvaluationPlanResult): string {
+  const markerLine = buildPlanMarker({
+    kind: plan.kind,
+    forwardingRequested: plan.forwardingRequested,
+    supportedMedia: plan.supportedMedia,
+    blockedReason: plan.blockedReason,
+  });
+
   const lines = [
     '[Attachments]',
     `Forwarding requested: ${plan.forwardingRequested ? 'yes' : 'no'}`,
     `Plan: ${plan.kind}`,
+    markerLine,
     plan.supportedMedia ? `Supported media: ${plan.supportedMedia.join(', ')}` : null,
     'Manifest:',
     plan.manifestText,

@@ -3,6 +3,7 @@ import { ensureLocalAppReady } from './verify-m004-s01';
 import { loadFixture } from './verify-s02-live';
 import { selectProofSubmission } from './verify-m005-s01';
 import { DEFAULT_PROMPT_FIELDS } from '../src/lib/assignments/queue-assignment-state';
+import { parsePlanMarker } from '../src/lib/ai/plan-marker';
 import type { EvalStatusEnum } from '../src/types/db';
 import type { ResultsResponse } from '../src/types/api';
 
@@ -555,12 +556,22 @@ async function fetchResults(
 }
 
 function assertPromptSnapshot(plan: string, promptSnapshot: string) {
+  const marker = parsePlanMarker(promptSnapshot);
+
   if (!promptSnapshot.includes(`Forwarding requested: ${plan === 'text-only' ? 'no' : 'yes'}`)) {
     throw new Error(`Prompt snapshot did not declare forwarding requested for plan ${plan}.`);
   }
 
   if (!promptSnapshot.includes(`Plan: ${plan}`)) {
     throw new Error(`Prompt snapshot did not include expected plan ${plan}.`);
+  }
+
+  if (marker.kind !== plan) {
+    throw new Error(`Prompt snapshot marker declared ${marker.kind} instead of ${plan}.`);
+  }
+
+  if (marker.forwardingRequested !== (plan !== 'text-only')) {
+    throw new Error(`Prompt snapshot marker forwardingRequested was ${marker.forwardingRequested} for plan ${plan}.`);
   }
 }
 

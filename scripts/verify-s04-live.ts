@@ -30,6 +30,7 @@ import {
   type EvaluationAuditRow,
   type PersistedRunAudit,
 } from './verify-s01-live';
+import { parsePlanMarker } from '../src/lib/ai/plan-marker';
 import {
   assertPersistedAssignmentRow,
   assertRunPreviewPayload,
@@ -37,7 +38,7 @@ import {
   loadFixture,
 } from './verify-s02-live';
 import { assertFilteredResultsResponse } from './verify-s03-live';
-import { assertPersistedAttachmentRow } from './verify-m005-s01';
+import { assertPersistedAttachmentRow, assertDetailAttachmentTruth } from './verify-m005-s01';
 
 type FetchLike = typeof fetch;
 type ReadFileLike = typeof readFile;
@@ -160,6 +161,7 @@ type ResultsProofSummary = {
   currentCompleted: number;
   currentErrored: number;
   verdictFilter: VerdictEnum;
+  evaluations: ResultsEvaluation[];
 };
 
 export type SetupQuestionSummary = {
@@ -249,6 +251,7 @@ const INVALID_MODEL = 'openai/not-a-real-model-s04-live';
 const VALID_JUDGE_PREFIX = 'S04 Live Results Valid';
 const INVALID_JUDGE_PREFIX = 'S04 Live Results Invalid';
 const ATTACHMENT_FORWARDING_INDEX = 1;
+const VERIFIER_PROMPT_FIELDS = ['questionText', 'answer', 'questionType'] as const;
 
 function shouldForwardAttachmentsForQuestion(index: number) {
   return index === ATTACHMENT_FORWARDING_INDEX;
@@ -2106,7 +2109,73 @@ async function verifyResultsApiProof(input: {
     currentCompleted: currentCompleted.length,
     currentErrored: currentErrored.length,
     verdictFilter,
+    evaluations: baseResponse.evaluations,
   } satisfies ResultsProofSummary;
+}
+
+function buildScenarioProofEntries(input: {
+  evaluations: ResultsEvaluation[];
+  refs: PhaseRefs;
+}): ScenarioProofEntry[] {
+  return SCENARIO_NAMES.map((scenario) => {
+    const matches = input.evaluations.filter((row) => {
+      const snapshot = row.prompt_snapshot;
+      if (!snapshot) {
+        return false;
+      }
+
+      try {
+        return parsePlanMarker(snapshot).kind === scenario;
+      } catch {
+        return false;
+      }
+    });
+
+    if (matches.length === 0) {
+      const malformed = input.evaluations.find((row) => {
+        const snapshot = row.prompt_snapshot;
+        if (!snapshot) {
+          return false;
+        }
+
+        try {
+          parsePlanMarker(snapshot);
+          return false;
+        } catch {
+          return true;
+        }
+      });
+
+      if (malformed) {
+        throw new VerifierPhaseError(
+          'results-assertions',
+          `Scenario classification is impossible because evaluation ${malformed.id} has a malformed plan marker.`,
+          input.refs
+        );
+      }
+
+      throw new VerifierPhaseError('results-assertions', `Evaluation log did not include a ${scenario} scenario.`, input.refs);
+    }
+
+    const evaluation = matches[0];
+    if (!evaluation.prompt_snapshot) {
+      throw new VerifierPhaseError(
+        'results-assertions',
+        `Scenario classification is impossible because evaluation ${evaluation.id} is missing prompt_snapshot.`,
+        input.refs
+      );
+    }
+
+    return {
+      scenario,
+      evaluationId: evaluation.id,
+      status: evaluation.status,
+      verdict: evaluation.verdict ?? null,
+      modelUsed: evaluation.model_used ?? 'unknown',
+      promptSnapshot: evaluation.prompt_snapshot,
+      errorMessage: evaluation.error_message ?? null,
+    };
+  });
 }
 
 function assertPageContains(body: string, expectedText: string, page: string) {
@@ -2327,13 +2396,91 @@ export async function runLiveVerification(
       })
   );
 
+  const submissionProof = await runPhase(
+    'submission-detail',
+    {
+      queueId: persistedTarget.queue.id,
+      queueLabel: persistedTarget.queue.queue_id,
+    },
+    async () =>
+      findSubmissionWithAttachments(
+        supabase,
+        persistedTarget.queue.id,
+        persistedTarget.queue.queue_id,
+        {
+          queueId: persistedTarget.queue.id,
+          queueLabel: persistedTarget.queue.queue_id,
+        }
+      )
+  );
+
+  const submissionDetailUrl = `${options.baseUrl}/queues/${persistedTarget.queue.id}/submissions/${submissionProof.submissionId}?source=results`;
+  const submissionDetailApiUrl = `${options.baseUrl}/api/queues/${persistedTarget.queue.id}/submissions/${submissionProof.submissionId}`;
+
+  const submissionDetailPayload = await runPhase(
+    'submission-detail',
+    {
+      queueId: persistedTarget.queue.id,
+      queueLabel: persistedTarget.queue.queue_id,
+      submissionId: submissionProof.submissionId,
+      detailUrl: submissionDetailApiUrl,
+    },
+    async () =>
+      readJsonResponse<unknown>(
+        fetchImpl,
+        submissionDetailApiUrl,
+        'Submission detail',
+        'submission-detail',
+        {
+          queueId: persistedTarget.queue.id,
+          queueLabel: persistedTarget.queue.queue_id,
+          submissionId: submissionProof.submissionId,
+          endpoint: `/api/queues/${persistedTarget.queue.id}/submissions/${submissionProof.submissionId}`
+        },
+        options.timeoutMs
+      )
+  );
+
+  let submissionDetailResponse: SubmissionDetailResponse;
+  try {
+    submissionDetailResponse = parseSubmissionDetailResponse(
+      submissionDetailPayload,
+      'submission detail response'
+    );
+  } catch (error) {
+    throw new VerifierPhaseError(
+      'submission-detail',
+      safeMessage(error),
+      {
+        queueId: persistedTarget.queue.id,
+        queueLabel: persistedTarget.queue.queue_id,
+        submissionId: submissionProof.submissionId,
+        detailUrl: submissionDetailApiUrl,
+      },
+      error
+    );
+  }
+
+  assertDetailAttachmentTruth({
+    detail: submissionDetailResponse,
+    submissionId: submissionProof.submissionId,
+    persistedAttachments: submissionProof.attachments,
+  });
+
   const inspectionUrls = buildInspectionUrls(
     options.baseUrl,
     persistedTarget.queue.id,
     verifierJudges.validJudge.id,
-    verifierJudges.invalidJudge.id
+    verifierJudges.invalidJudge.id,
+    submissionProof.submissionId
   );
-  const apiUrls = buildApiUrls(options.baseUrl, persistedTarget.queue.id, started.runId, resultsQueryString);
+  const apiUrls = buildApiUrls(
+    options.baseUrl,
+    persistedTarget.queue.id,
+    started.runId,
+    resultsQueryString,
+    submissionProof.submissionId
+  );
 
   await runPhase(
     'page-confirmation',
@@ -2350,6 +2497,56 @@ export async function runLiveVerification(
         fetchImpl,
       })
   );
+
+  const scenarioProof = await runPhase(
+    'results-assertions',
+    {
+      queueId: persistedTarget.queue.id,
+      queueLabel: persistedTarget.queue.queue_id,
+      runId: started.runId,
+      validJudgeId: verifierJudges.validJudge.id,
+      invalidJudgeId: verifierJudges.invalidJudge.id,
+      filter: resultsQueryString,
+    },
+    async () =>
+      buildScenarioProofEntries({
+        evaluations: resultsProof.evaluations,
+        refs: {
+          queueId: persistedTarget.queue.id,
+          queueLabel: persistedTarget.queue.queue_id,
+          runId: started.runId,
+          validJudgeId: verifierJudges.validJudge.id,
+          invalidJudgeId: verifierJudges.invalidJudge.id,
+        },
+      })
+  );
+
+  const assignmentForwarding = [
+    ...assignmentProof.createdAssignments.map((assignment) => ({
+      questionId: assignment.question.id,
+      assignmentId: assignment.assignmentId,
+      attachmentForwarding: assignment.attachmentForwarding,
+    })),
+    {
+      questionId: persistedTarget.questions[0].id,
+      assignmentId: invalidAssignment.assignmentId,
+      attachmentForwarding: true,
+    },
+  ];
+
+  const attachmentProof: AttachmentProofSummary = {
+    submissionId: submissionProof.submissionId,
+    submissionExternalId: submissionProof.submissionExternalId,
+    detailUrl: submissionDetailUrl,
+    detailApiUrl: submissionDetailApiUrl,
+    attachments: submissionProof.attachments.map((attachment) => ({
+      id: attachment.id,
+      externalAttachmentId: attachment.external_attachment_id,
+      fileName: attachment.file_name,
+      mediaType: attachment.media_type,
+      storageStatus: attachment.storage_status,
+    })),
+  };
 
   const validQuestionAssignments = new Map(
     assignmentProof.createdAssignments.map((assignment) => [assignment.question.id, assignment.assignmentId])
@@ -2387,6 +2584,9 @@ export async function runLiveVerification(
       retriedRows: auditProof.retriedRows,
     },
     resultsProof,
+    attachmentProof,
+    assignmentForwarding,
+    scenarioProof,
     inspectionUrls,
     apiUrls,
   };

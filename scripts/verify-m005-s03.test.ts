@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test';
+import { parsePlanMarker } from '../src/lib/ai/plan-marker';
 import {
   formatVerifierSummary,
   parseVerifierOptions,
@@ -62,7 +63,8 @@ describe('formatVerifierSummary', () => {
         judgeId: 'judge-text',
         judgeName: 'Text Judge',
         status: 'completed',
-        promptSnapshot: 'Forwarding requested: no\nPlan: text-only',
+        promptSnapshot:
+          'Forwarding requested: no\nPlan: text-only\nPlan marker: {"version":1,"kind":"text-only","forwardingRequested":false}',
         modelUsed: 'verifier/m005-s03-text',
         errorMessage: null,
       },
@@ -72,7 +74,8 @@ describe('formatVerifierSummary', () => {
         judgeId: 'judge-multi',
         judgeName: 'Multimodal Judge',
         status: 'completed',
-        promptSnapshot: 'Forwarding requested: yes\nPlan: multimodal',
+        promptSnapshot:
+          'Forwarding requested: yes\nPlan: multimodal\nPlan marker: {"version":1,"kind":"multimodal","forwardingRequested":true,"supportedMedia":["image/png","image/jpeg"]}',
         modelUsed: 'gateway/multimodal-model',
         errorMessage: null,
       },
@@ -82,11 +85,16 @@ describe('formatVerifierSummary', () => {
         judgeId: 'judge-blocked',
         judgeName: 'Blocked Judge',
         status: 'error',
-        promptSnapshot: 'Forwarding requested: yes\nPlan: blocked',
+        promptSnapshot:
+          'Forwarding requested: yes\nPlan: blocked\nPlan marker: {"version":1,"kind":"blocked","forwardingRequested":true,"blockedReason":"Model not configured"}',
         modelUsed: 'openai/gpt-4o-mini',
         errorMessage: 'Model not configured',
       },
     ];
+
+    expect(parsePlanMarker(evaluations[0].promptSnapshot).kind).toBe('text-only');
+    expect(parsePlanMarker(evaluations[1].promptSnapshot).kind).toBe('multimodal');
+    expect(parsePlanMarker(evaluations[2].promptSnapshot).kind).toBe('blocked');
 
     const summary: LiveVerificationSummary = {
       queueId: 'queue-1',

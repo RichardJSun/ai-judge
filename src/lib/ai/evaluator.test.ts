@@ -10,6 +10,7 @@ import {
   type EvaluateParams,
   type EvaluateSingleDeps,
 } from '@/lib/ai/evaluator';
+import { parsePlanMarker } from './plan-marker';
 
 function createParams(overrides: Partial<EvaluateParams> = {}): EvaluateParams {
   return {
@@ -286,6 +287,12 @@ describe('evaluateSingle', () => {
       expect(runningSnapshot).toContain('[Attachments]');
       expect(runningSnapshot).toContain('Plan: multimodal');
       expect(runningSnapshot).toContain('Supported media: image/png, image/jpeg');
+      expect(parsePlanMarker(runningSnapshot)).toEqual({
+        version: 1,
+        kind: 'multimodal',
+        forwardingRequested: true,
+        supportedMedia: ['image/png', 'image/jpeg'],
+      });
       expect(updates[1]?.values).toMatchObject({
         status: 'completed',
         verdict: 'pass',
@@ -563,6 +570,11 @@ describe('evaluateSingle', () => {
     const snapshot = updates[0]?.values.prompt_snapshot as string;
     expect(snapshot).toContain('Forwarding requested: no');
     expect(snapshot).toContain('Plan: text-only');
+    expect(parsePlanMarker(snapshot)).toEqual({
+      version: 1,
+      kind: 'text-only',
+      forwardingRequested: false,
+    });
     expect(snapshot.indexOf('externalAttachmentId=a')).toBeLessThan(snapshot.indexOf('externalAttachmentId=b'));
     expect(updates[1]?.values.status).toBe('completed');
   });
@@ -600,6 +612,12 @@ describe('evaluateSingle', () => {
     });
     expect((updates[1]?.values.prompt_snapshot as string)).toContain('Plan: blocked');
     expect((updates[1]?.values.prompt_snapshot as string)).toContain('Forwarding requested: yes');
+    expect(parsePlanMarker(updates[1]?.values.prompt_snapshot as string)).toEqual({
+      version: 1,
+      kind: 'blocked',
+      forwardingRequested: true,
+      blockedReason,
+    });
   });
 
   it('blocks unsupported media types when attachments are forwarded', async () => {
@@ -680,5 +698,21 @@ describe('planEvaluationRequest', () => {
       plan.manifestText.indexOf('externalAttachmentId=z')
     );
     expect(plan.manifestText).toContain('fileName=a.png');
+  });
+});
+
+describe('parsePlanMarker', () => {
+  it('rejects snapshots without a plan marker', () => {
+    expect(() => parsePlanMarker('[Attachments]\nPlan: text-only')).toThrow('Missing plan marker line.');
+  });
+
+  it('rejects snapshots with malformed marker JSON', () => {
+    expect(() => parsePlanMarker('Plan marker: {not-json}')).toThrow('Plan marker payload is not valid JSON');
+  });
+
+  it('rejects snapshots with unknown plan kinds', () => {
+    expect(() =>
+      parsePlanMarker('Plan marker: {"version":1,"kind":"legacy","forwardingRequested":false}')
+    ).toThrow('Plan marker kind legacy is invalid.');
   });
 });
