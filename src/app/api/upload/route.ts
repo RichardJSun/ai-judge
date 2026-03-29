@@ -64,6 +64,9 @@ export function buildUploadErrorResponse(error: unknown) {
         table: error.table,
         detail: error.detail,
         guidance: error.guidance,
+        attachmentId: error.attachmentId,
+        storageBucket: error.storageBucket,
+        storagePath: error.storagePath,
       },
       { status: error.status }
     );

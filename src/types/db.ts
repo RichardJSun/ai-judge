@@ -1,6 +1,7 @@
 export type VerdictEnum = 'pass' | 'fail' | 'inconclusive';
 export type RunStatusEnum = 'pending' | 'running' | 'completed' | 'error' | 'cancelled';
 export type EvalStatusEnum = 'pending' | 'running' | 'completed' | 'error';
+export type AttachmentStorageStatusEnum = 'stored' | 'unavailable' | 'error';
 
 export interface Queue {
   id: string;
@@ -33,6 +34,22 @@ export interface SubmissionAnswer {
   question_template_id: string;
   answer_json: Record<string, unknown> | null;
   created_at: string;
+}
+
+export interface SubmissionAttachment {
+  id: string;
+  submission_id: string;
+  external_attachment_id: string;
+  source_kind: string;
+  file_name: string;
+  media_type: string;
+  byte_size: number;
+  storage_bucket: string;
+  storage_path: string;
+  storage_status: AttachmentStorageStatusEnum;
+  storage_error: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface Judge {

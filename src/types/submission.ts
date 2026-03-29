@@ -10,6 +10,7 @@ export const SUPPORTED_MODELS = [
 ] as const;
 
 export type SupportedModel = (typeof SUPPORTED_MODELS)[number];
+export type SubmissionAttachmentSourceKind = 'inline_base64';
 
 export interface RawQuestion {
   rev: number;
@@ -21,6 +22,19 @@ export interface RawQuestion {
   };
 }
 
+export interface RawSubmissionAttachmentSource {
+  kind: SubmissionAttachmentSourceKind;
+  base64: string;
+}
+
+export interface RawSubmissionAttachment {
+  id: string;
+  fileName: string;
+  mediaType: string;
+  byteSize: number;
+  source: RawSubmissionAttachmentSource;
+}
+
 export interface RawSubmission {
   id: string;
   queueId: string;
@@ -28,5 +42,6 @@ export interface RawSubmission {
   createdAt?: number;
   questions: RawQuestion[];
   answers: Record<string, Record<string, unknown>>;
+  attachments?: RawSubmissionAttachment[];
   [key: string]: unknown;
 }

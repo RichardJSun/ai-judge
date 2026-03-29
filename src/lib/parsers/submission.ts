@@ -1,4 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import {
+  SubmissionAttachmentStorageError,
+  uploadSubmissionAttachment,
+} from '@/lib/submissions/attachment-storage';
 import type { ValidatedSubmission } from '@/lib/validators/upload';
 
 export interface ParseResult {
@@ -6,14 +10,21 @@ export interface ParseResult {
   submissions: number;
   questions: number;
   answers: number;
+  attachments: number;
 }
 
 export interface PersistSubmissionsOptions {
   signal?: AbortSignal;
 }
 
-type PersistenceTable = 'queues' | 'question_templates' | 'submissions' | 'submission_answers';
-type PersistencePhase = 'schema' | 'upload';
+type PersistenceSurface =
+  | 'queues'
+  | 'question_templates'
+  | 'submissions'
+  | 'submission_answers'
+  | 'submission_attachments'
+  | 'storage';
+type PersistencePhase = 'schema' | 'upload' | 'storage';
 
 type QueryResult<T> = {
   data: T | null;
@@ -22,10 +33,13 @@ type QueryResult<T> = {
 
 export class UploadPersistenceError extends Error {
   readonly phase: PersistencePhase;
-  readonly table: PersistenceTable;
+  readonly table: PersistenceSurface;
   readonly detail: string;
   readonly guidance: string;
   readonly status: number;
+  readonly attachmentId: string | null;
+  readonly storageBucket: string | null;
+  readonly storagePath: string | null;
 
   constructor({
     message,
@@ -34,13 +48,19 @@ export class UploadPersistenceError extends Error {
     detail,
     guidance,
     status,
+    attachmentId,
+    storageBucket,
+    storagePath,
   }: {
     message: string;
     phase: PersistencePhase;
-    table: PersistenceTable;
+    table: PersistenceSurface;
     detail: string;
     guidance: string;
     status: number;
+    attachmentId?: string | null;
+    storageBucket?: string | null;
+    storagePath?: string | null;
   }) {
     super(message);
     this.name = 'UploadPersistenceError';
@@ -49,6 +69,9 @@ export class UploadPersistenceError extends Error {
     this.detail = detail;
     this.guidance = guidance;
     this.status = status;
+    this.attachmentId = attachmentId ?? null;
+    this.storageBucket = storageBucket ?? null;
+    this.storagePath = storagePath ?? null;
   }
 }
 
@@ -74,7 +97,7 @@ function errorMessage(error: unknown) {
   return 'Unknown storage error.';
 }
 
-function isSchemaDrift(detail: string, table: PersistenceTable) {
+function isSchemaDrift(detail: string, table: Exclude<PersistenceSurface, 'storage'>) {
   const lowerDetail = detail.toLowerCase();
   const publicTable = `public.${table}`;
 
@@ -97,7 +120,11 @@ function isAbortLike(detail: string, signal?: AbortSignal) {
   );
 }
 
-function createPersistenceError(table: PersistenceTable, cause: unknown, signal?: AbortSignal) {
+function createPersistenceError(
+  table: Exclude<PersistenceSurface, 'storage'>,
+  cause: unknown,
+  signal?: AbortSignal
+) {
   const detail = errorMessage(cause);
 
   if (isSchemaDrift(detail, table)) {
@@ -132,11 +159,28 @@ function createPersistenceError(table: PersistenceTable, cause: unknown, signal?
   });
 }
 
-function assertArrayResult<T>(table: PersistenceTable, data: T[] | null, operation: string): T[] {
+function createAttachmentStoragePersistenceError(error: SubmissionAttachmentStorageError) {
+  return new UploadPersistenceError({
+    message: error.message,
+    phase: 'storage',
+    table: 'storage',
+    detail: error.detail,
+    guidance:
+      error.status === 504
+        ? 'Retry the upload after confirming the attachment object was not partially written.'
+        : 'Check the attachment storage bucket/path and retry after fixing the underlying storage issue.',
+    status: error.status,
+    attachmentId: error.attachmentId,
+    storageBucket: error.bucket,
+    storagePath: error.path,
+  });
+}
+
+function assertArrayResult<T>(table: PersistenceSurface, data: T[] | null, operation: string): T[] {
   if (!Array.isArray(data)) {
     throw new UploadPersistenceError({
       message: `Upload failed because ${table} returned an invalid ${operation} response.`,
-      phase: 'upload',
+      phase: table === 'storage' ? 'storage' : 'upload',
       table,
       detail: `Expected an array response from ${table} ${operation}.`,
       guidance: 'Check the Supabase query contract and update the parser if the selected columns changed.',
@@ -164,7 +208,7 @@ export async function persistSubmissions(
   options: PersistSubmissionsOptions = {}
 ): Promise<ParseResult> {
   const { signal } = options;
-  const counts: ParseResult = { queues: 0, submissions: 0, questions: 0, answers: 0 };
+  const counts: ParseResult = { queues: 0, submissions: 0, questions: 0, answers: 0, attachments: 0 };
 
   const queueIds = [...new Set(items.map((submission) => submission.queueId))];
 
@@ -241,7 +285,7 @@ export async function persistSubmissions(
         external_id: item.id,
         labeling_task_id: item.labelingTaskId ?? null,
         submitted_at: item.createdAt ? new Date(item.createdAt).toISOString() : null,
-        raw_json: item,
+        raw_json: createStoredSubmissionRawJson(item),
       };
     })
     .filter((row): row is NonNullable<typeof row> => row !== null);
@@ -322,18 +366,109 @@ export async function persistSubmissions(
     }
   }
 
-  if (allAnswerRows.length === 0) {
-    return counts;
+  if (allAnswerRows.length > 0) {
+    const answerUpsertQuery = supabase
+      .from('submission_answers')
+      .upsert(allAnswerRows, { onConflict: 'submission_id,question_template_id', ignoreDuplicates: false });
+    const { error: answerError } = await runQuery(answerUpsertQuery, signal);
+    if (answerError) {
+      throw createPersistenceError('submission_answers', answerError, signal);
+    }
+
+    counts.answers = allAnswerRows.length;
   }
 
-  const answerUpsertQuery = supabase
-    .from('submission_answers')
-    .upsert(allAnswerRows, { onConflict: 'submission_id,question_template_id', ignoreDuplicates: false });
-  const { error: answerError } = await runQuery(answerUpsertQuery, signal);
-  if (answerError) {
-    throw createPersistenceError('submission_answers', answerError, signal);
+  const attachmentRows: Array<{
+    submission_id: string;
+    external_attachment_id: string;
+    source_kind: string;
+    file_name: string;
+    media_type: string;
+    byte_size: number;
+    storage_bucket: string;
+    storage_path: string;
+    storage_status: 'stored';
+    storage_error: null;
+  }> = [];
+
+  for (const item of items) {
+    const queueUuid = queueMap.get(item.queueId);
+    if (!queueUuid) {
+      continue;
+    }
+
+    const submissionId = submissionMap.get(`${queueUuid}::${item.id}`);
+    if (!submissionId) {
+      continue;
+    }
+
+    for (const attachment of item.attachments ?? []) {
+      try {
+        const object = await uploadSubmissionAttachment(supabase, {
+          attachmentId: attachment.id,
+          mediaType: attachment.mediaType,
+          bytes: Buffer.from(attachment.source.base64, 'base64'),
+          submissionId,
+          signal,
+        });
+
+        attachmentRows.push({
+          submission_id: submissionId,
+          external_attachment_id: attachment.id,
+          source_kind: attachment.source.kind,
+          file_name: attachment.fileName,
+          media_type: attachment.mediaType,
+          byte_size: attachment.byteSize,
+          storage_bucket: object.bucket,
+          storage_path: object.path,
+          storage_status: 'stored',
+          storage_error: null,
+        });
+      } catch (error) {
+        if (error instanceof SubmissionAttachmentStorageError) {
+          throw createAttachmentStoragePersistenceError(error);
+        }
+
+        throw error;
+      }
+    }
   }
 
-  counts.answers = allAnswerRows.length;
+  if (attachmentRows.length > 0) {
+    const attachmentUpsertQuery = supabase
+      .from('submission_attachments')
+      .upsert(attachmentRows, {
+        onConflict: 'submission_id,external_attachment_id',
+        ignoreDuplicates: false,
+      })
+      .select('id');
+    const { data: attachmentData, error: attachmentError } = await runQuery(attachmentUpsertQuery, signal);
+    if (attachmentError) {
+      throw createPersistenceError('submission_attachments', attachmentError, signal);
+    }
+
+    const persistedAttachments = assertArrayResult<{ id: string }>(
+      'submission_attachments',
+      attachmentData,
+      'upsert'
+    );
+    counts.attachments = persistedAttachments.length;
+  }
+
   return counts;
+}
+
+function createStoredSubmissionRawJson(item: ValidatedSubmission) {
+  return {
+    ...item,
+    attachments: (item.attachments ?? []).map((attachment) => ({
+      id: attachment.id,
+      fileName: attachment.fileName,
+      mediaType: attachment.mediaType,
+      byteSize: attachment.byteSize,
+      source: {
+        kind: attachment.source.kind,
+      },
+    })),
+  };
 }

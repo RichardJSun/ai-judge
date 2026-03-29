@@ -1,4 +1,14 @@
-import type { Evaluation, EvaluationRun, Judge, JudgeAssignment, Queue, QuestionTemplate, Submission, VerdictEnum } from './db';
+import type {
+  Evaluation,
+  EvaluationRun,
+  Judge,
+  JudgeAssignment,
+  Queue,
+  QuestionTemplate,
+  Submission,
+  SubmissionAttachment,
+  VerdictEnum,
+} from './db';
 
 export type SubmissionDetailAnswer = string | number | boolean | null | Array<string | number | boolean>;
 
@@ -7,6 +17,7 @@ export interface UploadResult {
   submissions: number;
   questions: number;
   answers: number;
+  attachments?: number;
 }
 
 export interface QueueWithCounts extends Queue {
@@ -117,9 +128,21 @@ export interface SubmissionDetailQuestion {
   rawAnswer: Record<string, unknown> | null;
 }
 
+export interface SubmissionDetailAttachment {
+  id: SubmissionAttachment['id'];
+  external_attachment_id: SubmissionAttachment['external_attachment_id'];
+  source_kind: SubmissionAttachment['source_kind'];
+  file_name: SubmissionAttachment['file_name'];
+  media_type: SubmissionAttachment['media_type'];
+  byte_size: SubmissionAttachment['byte_size'];
+  storage_status: SubmissionAttachment['storage_status'];
+  storage_error: SubmissionAttachment['storage_error'];
+}
+
 export interface SubmissionDetailResponse {
   queue: Pick<Queue, 'id' | 'queue_id' | 'created_at'>;
   submission: Pick<Submission, 'id' | 'queue_id' | 'external_id' | 'labeling_task_id' | 'submitted_at' | 'created_at'>;
   summary: SubmissionDetailSummary;
   questions: SubmissionDetailQuestion[];
+  attachments?: SubmissionDetailAttachment[];
 }

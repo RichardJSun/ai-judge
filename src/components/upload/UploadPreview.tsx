@@ -24,6 +24,7 @@ export default function UploadPreview({ result, onReset }: UploadPreviewProps) {
         <Chip label={`${result.submissions} submission${result.submissions !== 1 ? 's' : ''}`} variant="outlined" />
         <Chip label={`${result.questions} question template${result.questions !== 1 ? 's' : ''}`} variant="outlined" />
         <Chip label={`${result.answers} answer${result.answers !== 1 ? 's' : ''}`} variant="outlined" />
+        <Chip label={`${result.attachments ?? 0} attachment${(result.attachments ?? 0) !== 1 ? 's' : ''}`} variant="outlined" />
       </Stack>
       <Box display="flex" gap={1}>
         <Button variant="contained" onClick={() => router.push('/queues')}>
