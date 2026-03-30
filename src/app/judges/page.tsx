@@ -1,12 +1,16 @@
 export {
+    buildJudgeDialogTitle,
     buildJudgePageHref,
-    getJudgePageQueryKey,
+    buildJudgeSaveSuccessMessage,
     handleJudgeCreateSuccess,
     JudgesPageContent,
     normalizeJudgePageSearchParam,
     parseJudgePageResponse,
+    persistJudgeUpdate,
+    requireManagedJudgeSelection,
     resolveJudgePageSyncHref,
 } from './JudgesPageClient';
+export { getJudgePageQueryKey } from '@/lib/judges/judge-query-cache';
 import JudgesPageClient, { type JudgeSearchParams } from './JudgesPageClient';
 
 export default async function JudgesPage({ searchParams }: { searchParams: Promise<JudgeSearchParams> }) {

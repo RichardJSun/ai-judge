@@ -20,17 +20,19 @@ import {
     Typography,
 } from '@mui/material';
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
-import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { z } from 'zod';
 import JudgeForm from '@/components/judges/JudgeForm';
 import ReviewerTableSurface from '@/components/layout/ReviewerTableSurface';
 import ReviewerPagination from '@/components/pagination/ReviewerPagination';
-import { JudgeRecordSchema, parseJudgeRecord } from '@/lib/judges/judge-lifecycle';
+import { parseJudgeRecord, JudgeRecordSchema } from '@/lib/judges/judge-lifecycle';
+import { getJudgePageQueryKey, reconcileSavedJudgeCaches } from '@/lib/judges/judge-query-cache';
 import type { JudgePageResponse } from '@/types/api';
+import type { Judge } from '@/types/db';
 
 const SAFE_JUDGES_ERROR = 'Failed to load judges.';
+const MISSING_MANAGED_JUDGE_ERROR = 'Select a judge from the current page before saving changes.';
 
 const JudgePageResponseSchema = z.object({
     judges: z.array(JudgeRecordSchema),
@@ -50,7 +52,9 @@ export interface JudgesPageContentProps {
     error?: Error | null;
     onRetry?: () => unknown | Promise<unknown>;
     onOpenCreate?: () => void;
+    onManageJudge?: (judge: Judge) => void;
     getPageHref?: (page: number) => string;
+    statusMessage?: string | null;
 }
 
 export function normalizeJudgePageSearchParam(value: JudgePageParam) {
@@ -122,8 +126,22 @@ export function resolveJudgePageSyncHref(pathname: string, searchParams: JudgeSe
     return buildJudgePageHref(pathname, searchParams, page);
 }
 
-export function getJudgePageQueryKey(page: number) {
-    return ['judges-page', page] as const;
+export function buildJudgeDialogTitle(selectedJudge: Pick<Judge, 'name'> | null) {
+    return selectedJudge ? `Manage ${selectedJudge.name}` : 'New Judge';
+}
+
+export function buildJudgeSaveSuccessMessage(savedJudge: Pick<Judge, 'name' | 'active'>) {
+    return savedJudge.active
+        ? `Saved ${savedJudge.name}. This judge remains active.`
+        : `Saved ${savedJudge.name}. This judge is now inactive but still persisted for history.`;
+}
+
+export function requireManagedJudgeSelection(selectedJudge: Judge | null) {
+    if (!selectedJudge) {
+        throw new Error(MISSING_MANAGED_JUDGE_ERROR);
+    }
+
+    return selectedJudge;
 }
 
 export async function handleJudgeCreateSuccess({
@@ -170,6 +188,24 @@ async function createJudge(payload: {
     return parseJudgeRecord(body, 'POST /api/judges response');
 }
 
+export async function persistJudgeUpdate(
+    judgeId: string,
+    payload: { name?: string; system_prompt?: string; model?: string; active?: boolean }
+) {
+    const response = await fetch(`/api/judges/${judgeId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+    });
+    const body = await readResponseBody(response, 'Failed to save judge.');
+
+    if (!response.ok) {
+        throw new Error(getApiErrorMessage(body, 'Failed to save judge.'));
+    }
+
+    return parseJudgeRecord(body, `PATCH /api/judges/${judgeId} response`);
+}
+
 export function JudgesPageContent({
     data,
     isLoading,
@@ -177,7 +213,9 @@ export function JudgesPageContent({
     error = null,
     onRetry = () => undefined,
     onOpenCreate = () => undefined,
+    onManageJudge = () => undefined,
     getPageHref = (page) => `/judges?page=${page}`,
+    statusMessage = null,
 }: JudgesPageContentProps) {
     const visibleStart = data && data.judges.length > 0 ? (data.page - 1) * data.pageSize + 1 : 0;
     const visibleEnd = data && data.judges.length > 0 ? visibleStart + data.judges.length - 1 : 0;
@@ -197,6 +235,8 @@ export function JudgesPageContent({
                     New Judge
                 </Button>
             </Stack>
+
+            {statusMessage ? <Alert severity="success">{statusMessage}</Alert> : null}
 
             {isLoading ? (
                 <Box display="flex" justifyContent="center" mt={6}>
@@ -267,7 +307,13 @@ export function JudgesPageContent({
                                         </TableCell>
                                         <TableCell>{new Date(judge.updated_at).toLocaleString()}</TableCell>
                                         <TableCell align="right">
-                                            <Button component={Link} href={`/judges/${judge.id}`} size="small" startIcon={<EditIcon />}>
+                                            <Button
+                                                type="button"
+                                                size="small"
+                                                startIcon={<EditIcon />}
+                                                onClick={() => onManageJudge(judge)}
+                                                aria-haspopup="dialog"
+                                            >
                                                 Manage
                                             </Button>
                                         </TableCell>
@@ -288,7 +334,9 @@ export default function JudgesPageClient({ searchParams }: { searchParams: Judge
     const pathname = usePathname();
     const router = useRouter();
     const queryClient = useQueryClient();
-    const [open, setOpen] = useState(false);
+    const [dialogOpen, setDialogOpen] = useState(false);
+    const [selectedJudge, setSelectedJudge] = useState<Judge | null>(null);
+    const [statusMessage, setStatusMessage] = useState<string | null>(null);
     const requestedPage = normalizeJudgePageSearchParam(searchParams.page);
 
     const { data, isLoading, isError, error, refetch } = useQuery<JudgePageResponse, Error>({
@@ -320,23 +368,60 @@ export default function JudgesPageClient({ searchParams }: { searchParams: Judge
 
     const createMutation = useMutation({
         mutationFn: createJudge,
+        onMutate: () => {
+            setStatusMessage(null);
+        },
         onSuccess: async () => {
             await handleJudgeCreateSuccess({
                 queryClient,
                 page: getActivePage,
-                closeDialogAction: () => setOpen(false),
+                closeDialogAction: () => {
+                    setDialogOpen(false);
+                    setSelectedJudge(null);
+                },
             });
+            setStatusMessage('Created a new judge and refreshed this page of results.');
         },
     });
 
-    const handleOpenCreate = useCallback(() => setOpen(true), []);
-    const handleCloseCreate = useCallback(() => {
-        if (createMutation.isPending) {
+    const updateMutation = useMutation({
+        mutationFn: async (formData: { name: string; system_prompt: string; model: string; active: boolean }) => {
+            const managedJudge = requireManagedJudgeSelection(selectedJudge);
+            return await persistJudgeUpdate(managedJudge.id, formData);
+        },
+        onMutate: () => {
+            setStatusMessage(null);
+        },
+        onSuccess: async (savedJudge) => {
+            await reconcileSavedJudgeCaches({
+                queryClient,
+                page: getActivePage,
+                savedJudge,
+            });
+            setDialogOpen(false);
+            setSelectedJudge(null);
+            setStatusMessage(buildJudgeSaveSuccessMessage(savedJudge));
+        },
+    });
+
+    const handleOpenCreate = useCallback(() => {
+        setSelectedJudge(null);
+        setDialogOpen(true);
+    }, []);
+
+    const handleOpenManage = useCallback((judge: Judge) => {
+        setSelectedJudge(judge);
+        setDialogOpen(true);
+    }, []);
+
+    const handleCloseDialog = useCallback(() => {
+        if (createMutation.isPending || updateMutation.isPending) {
             return;
         }
 
-        setOpen(false);
-    }, [createMutation.isPending]);
+        setDialogOpen(false);
+        setSelectedJudge(null);
+    }, [createMutation.isPending, updateMutation.isPending]);
 
     const getPageHref = useCallback(
         (page: number) => buildJudgePageHref(pathname, searchParams, page),
@@ -352,18 +437,27 @@ export default function JudgesPageClient({ searchParams }: { searchParams: Judge
                 error={error}
                 onRetry={refetch}
                 onOpenCreate={handleOpenCreate}
+                onManageJudge={handleOpenManage}
                 getPageHref={getPageHref}
+                statusMessage={statusMessage}
             />
 
-            <Dialog open={open} onClose={handleCloseCreate} maxWidth="sm" fullWidth>
-                <DialogTitle>New Judge</DialogTitle>
+            <Dialog open={dialogOpen} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
+                <DialogTitle>{buildJudgeDialogTitle(selectedJudge)}</DialogTitle>
                 <DialogContent>
                     <Box pt={1}>
                         <JudgeForm
+                            initial={selectedJudge ?? undefined}
                             onSave={async (formData) => {
+                                if (selectedJudge) {
+                                    await updateMutation.mutateAsync(formData);
+                                    return;
+                                }
+
                                 await createMutation.mutateAsync(formData);
                             }}
-                            onCancel={handleCloseCreate}
+                            onCancel={handleCloseDialog}
+                            submitLabel={selectedJudge ? 'Save Changes' : undefined}
                         />
                     </Box>
                 </DialogContent>
