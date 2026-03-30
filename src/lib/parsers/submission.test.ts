@@ -760,7 +760,7 @@ describe('handleUpload validation', () => {
     const body = await jsonBody<{ error: string }>(response);
 
     expect(response.status).toBe(413);
-    expect(body.error).toBe('File too large. Maximum size is 10MB.');
+    expect(body.error).toBe('File too large. Maximum size is 50MB.');
   });
 });
 

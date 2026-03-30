@@ -15,6 +15,14 @@ export default function FileDropzone({ onSuccess }: FileDropzoneProps) {
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  function openFilePicker() {
+    if (loading) {
+      return;
+    }
+
+    inputRef.current?.click();
+  }
+
   async function uploadFile(file: File) {
     setLoading(true);
     setError(null);
@@ -39,6 +47,19 @@ export default function FileDropzone({ onSuccess }: FileDropzoneProps) {
     if (file) uploadFile(file);
   }
 
+  function handleKeyDown(event: React.KeyboardEvent) {
+    if (loading) {
+      return;
+    }
+
+    if (event.key !== 'Enter' && event.key !== ' ') {
+      return;
+    }
+
+    event.preventDefault();
+    openFilePicker();
+  }
+
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (file) uploadFile(file);
@@ -55,10 +76,31 @@ export default function FileDropzone({ onSuccess }: FileDropzoneProps) {
           textAlign: 'center',
           cursor: loading ? 'not-allowed' : 'pointer',
           bgcolor: dragging ? 'action.hover' : 'background.paper',
-          transition: 'border-color 0.2s, background-color 0.2s',
+          transition:
+            'transform 140ms cubic-bezier(0.23, 1, 0.32, 1), border-color 160ms ease, background-color 160ms ease, box-shadow 160ms ease',
+          touchAction: 'manipulation',
+          outline: 'none',
+          '&:focus-visible': {
+            borderColor: 'primary.main',
+            boxShadow: (theme) => `0 0 0 4px ${theme.palette.primary.main}1f`,
+          },
+          '&:active': loading
+            ? undefined
+            : {
+                transform: 'scale(0.995)',
+              },
         }}
-        onClick={() => !loading && inputRef.current?.click()}
-        onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+        role="button"
+        tabIndex={loading ? -1 : 0}
+        aria-disabled={loading ? 'true' : undefined}
+        aria-label="Upload submission JSON file"
+        onClick={openFilePicker}
+        onKeyDown={handleKeyDown}
+        onDragOver={(e) => {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'copy';
+          setDragging(true);
+        }}
         onDragLeave={() => setDragging(false)}
         onDrop={handleDrop}
       >
@@ -66,10 +108,13 @@ export default function FileDropzone({ onSuccess }: FileDropzoneProps) {
           <CircularProgress />
         ) : (
           <>
-            <CloudUploadIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 1 }} />
+            <CloudUploadIcon aria-hidden="true" sx={{ fontSize: 48, color: 'text.secondary', mb: 1 }} />
             <Typography variant="h6">Drop your JSON file here</Typography>
             <Typography variant="body2" color="text.secondary">
-              or click to browse
+              Click, press Enter, or drop a file to browse
+            </Typography>
+            <Typography variant="caption" color="text.secondary" display="block" mt={1}>
+              JSON queue only, up to 50 MB.
             </Typography>
           </>
         )}

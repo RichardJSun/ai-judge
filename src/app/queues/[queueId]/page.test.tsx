@@ -86,6 +86,9 @@ describe('QueuePageContent', () => {
         );
 
         expect(html).toContain('Submissions');
+        expect(html).toContain('Back to queues');
+        expect(html).toContain('href="/queues"');
+        expect(html).toContain('queue-1');
         expect(html).toContain('Assign Judges');
         expect(html).toContain('Run Evaluations');
         expect(html).toContain('Results');
@@ -109,6 +112,9 @@ describe('QueuePageContent', () => {
         );
 
         expect(html).toContain('Showing 21-25 of 25 submissions.');
+        expect(html).toContain('Back to queues');
+        expect(html).toContain('href="/queues"');
+        expect(html).toContain('queue-1');
         expect(html).toContain('>ID<');
         expect(html).toContain('>Task ID<');
         expect(html).toContain('>Submitted<');

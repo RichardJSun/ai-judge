@@ -54,7 +54,7 @@ Go to **Queues**, open a queue, then click **Assign Judges**.
 
 > This is the assignment matrix. I map judges to questions here — one or more judges per question.
 >
-> If I expand a row, I can also configure which prompt fields are included — question text, answer, question type — so I control exactly what the judge sees. That's one of the bonus features from the spec.
+> If I expand a row before checking a new judge, I can choose which prompt fields that new assignment will include — question text, answer, and question type. That's one of the bonus features from the spec.
 
 On screen:
 - Show the matrix.
@@ -119,7 +119,7 @@ On screen:
 
 > To summarize the trade-offs I made: evaluation work runs in-process using Next.js `after()` — simple for a take-home, but a real deployment would use a separate worker. Results are queue-scoped rather than run-scoped, which is better for reviewer history. And the run page polls instead of using Supabase Realtime, keeping the runtime smaller.
 >
-> For bonus features: prompt field selection lets users control what the judge sees, the per-judge chart animates, and attachment forwarding is capability-gated — if a model can't consume the file type, the app records an explicit blocked diagnostic instead of silently dropping it.
+> For bonus features: prompt field selection lets users control what newly created assignments send to the judge, the per-judge chart animates, and attachment forwarding is capability-gated — if a model can't consume the file type, the app records an explicit blocked diagnostic instead of silently dropping it.
 >
 > Time spent was roughly 32 hours across March 27 to 29. Thanks for reviewing.
 
@@ -138,4 +138,4 @@ Before recording:
 
 ## One-paragraph version for a submission email
 
-> AI Judge is a Next.js 16 + React 19 + TypeScript + Supabase review workflow. Reviewers upload queue JSON, create and manage AI judges, assign them per question with configurable prompt fields, run real LLM-backed evaluations, and inspect persisted results with filters, animated pass-rate charts, and per-evaluation audit detail. Bonus features include prompt field selection, animated per-judge charts, and capability-gated multimodal attachment forwarding. Time spent: ~32 hours across March 27–29.
+> AI Judge is a Next.js 16 + React 19 + TypeScript + Supabase review workflow. Reviewers upload queue JSON, create and manage AI judges, assign them per question, choose prompt fields when creating new assignments, run real LLM-backed evaluations, and inspect persisted results with filters, animated pass-rate charts, and per-evaluation audit detail. Bonus features include prompt field selection, animated per-judge charts, and capability-gated multimodal attachment forwarding. Time spent: ~32 hours across March 27–29.

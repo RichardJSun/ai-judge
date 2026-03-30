@@ -22,6 +22,9 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo } from 'react';
 import ReviewerTableSurface from '@/components/layout/ReviewerTableSurface';
+import ReviewerWayfinding, {
+    createQueueReviewerBreadcrumbs,
+} from '@/components/navigation/ReviewerWayfinding';
 import ReviewerPagination from '@/components/pagination/ReviewerPagination';
 import ReviewerTimestamp from '@/lib/reviewer/reviewer-timestamp';
 import {
@@ -42,6 +45,7 @@ export interface QueuePageContentProps {
     isLoading: boolean;
     loadError: Error | null;
     page: number;
+    onBack?: () => void;
     onRetry: () => void | Promise<unknown>;
     getPageHref?: (page: number) => string;
     getSubmissionHref?: (submissionId: string) => string;
@@ -78,6 +82,7 @@ export function QueuePageContent({
     isLoading,
     loadError,
     page,
+    onBack = () => undefined,
     onRetry,
     getPageHref,
     getSubmissionHref,
@@ -90,10 +95,16 @@ export function QueuePageContent({
 
     return (
         <>
-            <Stack direction="row" alignItems="center" justifyContent="space-between" mb={3} gap={2} flexWrap="wrap">
-                <Typography variant="h4" fontWeight={700}>
-                    Submissions
-                </Typography>
+            <Stack direction="row" alignItems="flex-start" justifyContent="space-between" mb={3} gap={2} flexWrap="wrap">
+                <Box>
+                    <ReviewerWayfinding
+                        title="Submissions"
+                        backLabel="Back to queues"
+                        backHref="/queues"
+                        onBack={onBack}
+                        breadcrumbs={createQueueReviewerBreadcrumbs(queueId, 'Submissions')}
+                    />
+                </Box>
                 <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
                     <Button component={Link} href={`/queues/${queueId}/assign`} startIcon={<AssignmentIcon />}>
                         Assign Judges
@@ -254,6 +265,7 @@ export default function QueuePageClient({
             isLoading={isLoading && !data}
             loadError={error}
             page={canonicalState.page}
+            onBack={() => router.push('/queues')}
             onRetry={() => refetch()}
             getPageHref={getPageHref}
             getSubmissionHref={getSubmissionHref}

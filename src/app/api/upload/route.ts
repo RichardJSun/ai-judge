@@ -7,8 +7,9 @@ import {
 import { createServiceClient } from '@/lib/supabase/server';
 import { SubmissionFileSchema } from '@/lib/validators/upload';
 
-export const MAX_UPLOAD_FILE_SIZE_BYTES = 10 * 1024 * 1024;
-export const UPLOAD_TIMEOUT_MS = 15_000;
+export const MAX_UPLOAD_FILE_SIZE_BYTES = 50 * 1024 * 1024;
+export const UPLOAD_TIMEOUT_MS = 60_000;
+const MAX_UPLOAD_FILE_SIZE_LABEL = '50MB';
 
 type UploadHandlerDeps = {
   createServiceClient: typeof createServiceClient;
@@ -93,7 +94,7 @@ export async function handleUpload(request: Request, deps: UploadHandlerDeps = d
 
     if (file.size > MAX_UPLOAD_FILE_SIZE_BYTES) {
       return NextResponse.json(
-        { error: 'File too large. Maximum size is 10MB.' },
+        { error: `File too large. Maximum size is ${MAX_UPLOAD_FILE_SIZE_LABEL}.` },
         { status: 413 }
       );
     }
