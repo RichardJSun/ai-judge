@@ -3,6 +3,8 @@
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { Breadcrumbs, Button, Stack, Typography } from '@mui/material';
 import Link from 'next/link';
+import type { MouseEvent } from 'react';
+import { buildQueueResultsHref } from '@/lib/results/results-page-url';
 
 export interface ReviewerWayfindingBreadcrumb {
   label: string;
@@ -13,6 +15,7 @@ export interface ReviewerWayfindingBreadcrumb {
 export interface ReviewerWayfindingProps {
   title: string;
   backLabel: string;
+  backHref?: string;
   onBack: () => void;
   breadcrumbs?: ReviewerWayfindingBreadcrumb[];
 }
@@ -46,7 +49,8 @@ export function createQueueReviewerBreadcrumbs(
 export function createSubmissionDetailBreadcrumbs(
   queueId: string,
   source: 'queue' | 'results',
-  currentLabel = 'Submission detail'
+  currentLabel = 'Submission detail',
+  resultsHref = buildQueueResultsHref(queueId, {})
 ): ReviewerWayfindingBreadcrumb[] {
   assertNonEmpty(queueId, 'queueId');
   assertNonEmpty(currentLabel, 'currentLabel');
@@ -57,7 +61,7 @@ export function createSubmissionDetailBreadcrumbs(
   ];
 
   if (source === 'results') {
-    breadcrumbs.push({ label: 'Results', href: `/queues/${queueId}/results` });
+    breadcrumbs.push({ label: 'Results', href: resultsHref });
   }
 
   breadcrumbs.push({ label: currentLabel, current: true });
@@ -68,12 +72,21 @@ export function createSubmissionDetailBreadcrumbs(
 export default function ReviewerWayfinding({
   title,
   backLabel,
+  backHref,
   onBack,
   breadcrumbs = [],
 }: ReviewerWayfindingProps) {
   assertNonEmpty(title, 'title');
   assertNonEmpty(backLabel, 'backLabel');
   validateBreadcrumbs(breadcrumbs);
+
+  const handleBackClick = (event: MouseEvent<HTMLAnchorElement | HTMLButtonElement>) => {
+    if (backHref) {
+      event.preventDefault();
+    }
+
+    onBack();
+  };
 
   return (
     <Stack spacing={1.5} mb={3}>
@@ -101,7 +114,13 @@ export default function ReviewerWayfinding({
       ) : null}
 
       <Stack direction="row" alignItems="center" spacing={1}>
-        <Button startIcon={<ArrowBackIcon />} onClick={onBack} aria-label={backLabel}>
+        <Button
+          startIcon={<ArrowBackIcon />}
+          aria-label={backLabel}
+          onClick={handleBackClick}
+          component={backHref ? Link : 'button'}
+          href={backHref}
+        >
           {backLabel}
         </Button>
         <Typography component="h1" variant="h4" fontWeight={700}>

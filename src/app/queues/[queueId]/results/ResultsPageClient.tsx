@@ -21,6 +21,15 @@ import PassRateChart from '@/components/results/PassRateChart';
 import ResultsFilters from '@/components/results/ResultsFilters';
 import ResultsTable from '@/components/results/ResultsTable';
 import { fetchJson, parseResultsResponse } from '@/lib/results/fetch-json';
+import {
+  buildResultsPageHref,
+  buildResultsQueryString,
+  getQueueResultsPath,
+  normalizeResultsPageSearchParams,
+  resolveResultsPageSyncHref,
+  type ResultsPageSearchParams,
+  type ResultsPageUrlState,
+} from '@/lib/results/results-page-url';
 import type {
   ResultsFilterJudge,
   ResultsFilterQuestion,
@@ -29,19 +38,6 @@ import type {
 import type { VerdictEnum } from '@/types/db';
 
 const SAFE_RESULTS_ERROR = 'Failed to load queue results.';
-const VALID_VERDICTS: readonly VerdictEnum[] = ['pass', 'fail', 'inconclusive'];
-const RESULTS_FILTER_PARAM_KEYS = new Set(['page', 'judgeId', 'questionId', 'verdict']);
-
-export type ResultsPageSearchParams = Record<string, string | string[] | undefined>;
-
-type ResultsPageParamValue = string | string[] | undefined;
-
-export interface ResultsPageUrlState {
-  page: number;
-  selectedJudges: string[];
-  selectedQuestions: string[];
-  selectedVerdicts: VerdictEnum[];
-}
 
 export interface ResultsPageContentProps {
   queueId: string;
@@ -68,143 +64,6 @@ function fetchResults(queueId: string, filterQueryString: string) {
     fallbackMessage: SAFE_RESULTS_ERROR,
     parse: (value) => parseResultsResponse(value, `/api/queues/${queueId}/results response`),
   });
-}
-
-function normalizeResultsPageParam(value: ResultsPageParamValue) {
-  const candidate = Array.isArray(value) ? value[0] : value;
-
-  if (typeof candidate !== 'string') {
-    return 1;
-  }
-
-  const trimmed = candidate.trim();
-
-  if (!/^[1-9]\d*$/.test(trimmed)) {
-    return 1;
-  }
-
-  const parsed = BigInt(trimmed);
-  const maxSafePage = BigInt(Number.MAX_SAFE_INTEGER);
-
-  if (parsed > maxSafePage) {
-    return 1;
-  }
-
-  return Number(parsed);
-}
-
-function normalizeSearchParamList(value: ResultsPageParamValue) {
-  const values = Array.isArray(value) ? value : value == null ? [] : [value];
-  return [...new Set(values.map((candidate) => candidate.trim()).filter((candidate) => candidate.length > 0))];
-}
-
-export function normalizeResultsPageSearchParams(searchParams: ResultsPageSearchParams): ResultsPageUrlState {
-  const verdicts = normalizeSearchParamList(searchParams.verdict).filter(
-    (candidate): candidate is VerdictEnum => VALID_VERDICTS.includes(candidate as VerdictEnum)
-  );
-
-  return {
-    page: normalizeResultsPageParam(searchParams.page),
-    selectedJudges: normalizeSearchParamList(searchParams.judgeId),
-    selectedQuestions: normalizeSearchParamList(searchParams.questionId),
-    selectedVerdicts: verdicts,
-  };
-}
-
-export function buildResultsQueryString(state: ResultsPageUrlState) {
-  const searchParams = new URLSearchParams();
-  searchParams.set('page', String(state.page));
-
-  for (const judgeId of state.selectedJudges) {
-    searchParams.append('judgeId', judgeId);
-  }
-
-  for (const questionId of state.selectedQuestions) {
-    searchParams.append('questionId', questionId);
-  }
-
-  for (const verdict of state.selectedVerdicts) {
-    searchParams.append('verdict', verdict);
-  }
-
-  return searchParams.toString();
-}
-
-export function buildResultsPageHref(
-  pathname: string,
-  searchParams: ResultsPageSearchParams,
-  state: ResultsPageUrlState
-) {
-  const nextSearchParams = new URLSearchParams();
-
-  for (const [key, value] of Object.entries(searchParams)) {
-    if (RESULTS_FILTER_PARAM_KEYS.has(key) || value == null) {
-      continue;
-    }
-
-    if (Array.isArray(value)) {
-      for (const candidate of value) {
-        nextSearchParams.append(key, candidate);
-      }
-      continue;
-    }
-
-    nextSearchParams.set(key, value);
-  }
-
-  nextSearchParams.set('page', String(state.page));
-
-  for (const judgeId of state.selectedJudges) {
-    nextSearchParams.append('judgeId', judgeId);
-  }
-
-  for (const questionId of state.selectedQuestions) {
-    nextSearchParams.append('questionId', questionId);
-  }
-
-  for (const verdict of state.selectedVerdicts) {
-    nextSearchParams.append('verdict', verdict);
-  }
-
-  const query = nextSearchParams.toString();
-  return query ? `${pathname}?${query}` : pathname;
-}
-
-function hasCanonicalSingleValue(value: ResultsPageParamValue, expected: string) {
-  return typeof value === 'string' && value === expected;
-}
-
-function hasCanonicalListValue(value: ResultsPageParamValue, expected: readonly string[]) {
-  if (expected.length === 0) {
-    return typeof value === 'undefined';
-  }
-
-  if (typeof value === 'string') {
-    return expected.length === 1 && value === expected[0];
-  }
-
-  if (!Array.isArray(value)) {
-    return false;
-  }
-
-  return value.length === expected.length && value.every((candidate, index) => candidate === expected[index]);
-}
-
-export function resolveResultsPageSyncHref(
-  pathname: string,
-  searchParams: ResultsPageSearchParams,
-  state: ResultsPageUrlState
-) {
-  const pageIsCanonical = hasCanonicalSingleValue(searchParams.page, String(state.page));
-  const judgesAreCanonical = hasCanonicalListValue(searchParams.judgeId, state.selectedJudges);
-  const questionsAreCanonical = hasCanonicalListValue(searchParams.questionId, state.selectedQuestions);
-  const verdictsAreCanonical = hasCanonicalListValue(searchParams.verdict, state.selectedVerdicts);
-
-  if (pageIsCanonical && judgesAreCanonical && questionsAreCanonical && verdictsAreCanonical) {
-    return null;
-  }
-
-  return buildResultsPageHref(pathname, searchParams, state);
 }
 
 export function createResultsPageCanonicalState(
@@ -282,7 +141,12 @@ export function ResultsPageContent({
   onJudgesChange,
   onQuestionsChange,
   onVerdictsChange,
-  getPageHref = (nextPage) => `/queues/${queueId}/results?page=${nextPage}`,
+  getPageHref = (nextPage) => buildResultsPageHref(getQueueResultsPath(queueId), {
+    page: nextPage,
+    selectedJudges: [],
+    selectedQuestions: [],
+    selectedVerdicts: [],
+  }),
 }: ResultsPageContentProps) {
   const chartData = results?.judgePassRates ?? [];
   const completedEvaluations = results ? getCompletedEvaluationCount(results) : 0;
@@ -292,6 +156,7 @@ export function ResultsPageContent({
       <ReviewerWayfinding
         title="Results"
         backLabel="Back to queue"
+        backHref={`/queues/${queueId}`}
         onBack={onBack}
         breadcrumbs={createQueueReviewerBreadcrumbs(queueId, 'Results')}
       />
@@ -351,7 +216,16 @@ export function ResultsPageContent({
             </Stack>
           </Paper>
 
-          <ResultsTable queueId={queueId} evaluations={results.evaluations} />
+          <ResultsTable
+            queueId={queueId}
+            evaluations={results.evaluations}
+            resultsContext={{
+              page,
+              selectedJudges,
+              selectedQuestions,
+              selectedVerdicts,
+            }}
+          />
 
           <Box mt={2}>
             <ReviewerPagination
@@ -414,14 +288,14 @@ export default function ResultsPageClient({
 
   const updateUrlState = useCallback(
     (nextState: ResultsPageUrlState) => {
-      router.replace(buildResultsPageHref(pathname, searchParams, nextState), { scroll: false });
+      router.replace(buildResultsPageHref(pathname, nextState), { scroll: false });
     },
-    [pathname, router, searchParams]
+    [pathname, router]
   );
 
   const getPageHref = useCallback(
-    (nextPage: number) => buildResultsPageHref(pathname, searchParams, { ...canonicalState, page: nextPage }),
-    [canonicalState, pathname, searchParams]
+    (nextPage: number) => buildResultsPageHref(pathname, { ...canonicalState, page: nextPage }),
+    [canonicalState, pathname]
   );
 
   return (

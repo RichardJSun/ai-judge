@@ -11,6 +11,7 @@ describe('ReviewerWayfinding', () => {
       <ReviewerWayfinding
         title="Results"
         backLabel="Back to queue"
+        backHref="/queues/queue-1"
         onBack={() => undefined}
         breadcrumbs={createQueueReviewerBreadcrumbs('queue-1', 'Results')}
       />
@@ -29,15 +30,23 @@ describe('ReviewerWayfinding', () => {
       <ReviewerWayfinding
         title="Submission detail"
         backLabel="Back to results"
+        backHref="/queues/queue-1/results?page=3&judgeId=judge-1&questionId=question-1&verdict=pass"
         onBack={() => undefined}
-        breadcrumbs={createSubmissionDetailBreadcrumbs('queue-1', 'results')}
+        breadcrumbs={createSubmissionDetailBreadcrumbs(
+          'queue-1',
+          'results',
+          'Submission detail',
+          '/queues/queue-1/results?page=3&judgeId=judge-1&questionId=question-1&verdict=pass'
+        )}
       />
     );
 
     expect(html).toContain('Back to results');
     expect(html).toContain('href="/queues"');
     expect(html).toContain('href="/queues/queue-1"');
-    expect(html).toContain('href="/queues/queue-1/results"');
+    expect(html).toContain(
+      'href="/queues/queue-1/results?page=3&amp;judgeId=judge-1&amp;questionId=question-1&amp;verdict=pass"'
+    );
     expect(html).toContain('Submission detail');
   });
 

@@ -8,6 +8,7 @@ import {
   getSubmissionDetailQueryKey,
   handleSubmissionDetailBack,
   parseSubmissionDetailNavigationSource,
+  resolveSubmissionDetailNavigationContext,
   SubmissionDetailPageContent,
 } from './page';
 
@@ -161,11 +162,45 @@ describe('submission detail page helpers', () => {
     expect(parseSubmissionDetailNavigationSource(['results', 'queue'])).toBe('queue');
   });
 
-  it('keeps queue-origin and results fallback labels and targets queue scoped', () => {
+  it('normalizes only whitelisted results context for direct-loaded results-origin detail pages', () => {
+    expect(
+      resolveSubmissionDetailNavigationContext('queue-1', {
+        source: 'results',
+        page: ['999999999999999999999999', '4'],
+        judgeId: [' judge-1 ', 'judge-1', ''],
+        questionId: ['question-1', 'question-1', ''],
+        verdict: ['pass', 'maybe', 'pass', ''],
+        extra: 'should-be-dropped',
+      })
+    ).toEqual({
+      source: 'results',
+      resultsHref: '/queues/queue-1/results?page=1&judgeId=judge-1&questionId=question-1&verdict=pass',
+    });
+
+    expect(
+      resolveSubmissionDetailNavigationContext('queue-1', {
+        source: ['results'],
+        page: '3',
+        judgeId: 'judge-1',
+      })
+    ).toEqual({
+      source: 'queue',
+      resultsHref: null,
+    });
+  });
+
+  it('keeps queue-origin and results fallback labels and targets queue scoped unless sanitized results context is present', () => {
     expect(getSubmissionDetailBackLabel('queue')).toBe('Back to queue');
     expect(getSubmissionDetailBackLabel('results')).toBe('Back to results');
     expect(getSubmissionDetailBackHref('queue-1', 'queue')).toBe('/queues/queue-1');
-    expect(getSubmissionDetailBackHref('queue-1', 'results')).toBe('/queues/queue-1/results');
+    expect(getSubmissionDetailBackHref('queue-1', 'results')).toBe('/queues/queue-1/results?page=1');
+    expect(
+      getSubmissionDetailBackHref(
+        'queue-1',
+        'results',
+        '/queues/queue-1/results?page=3&judgeId=judge-1&questionId=question-1&verdict=pass'
+      )
+    ).toBe('/queues/queue-1/results?page=3&judgeId=judge-1&questionId=question-1&verdict=pass');
   });
 
   it('returns queue-origin visits to the queue page', () => {
@@ -194,6 +229,7 @@ describe('submission detail page helpers', () => {
     handleSubmissionDetailBack({
       queueId: 'queue-1',
       source: 'results',
+      resultsHref: '/queues/queue-1/results?page=3&judgeId=judge-1',
       router,
       historyLength: 2,
     });
@@ -202,7 +238,7 @@ describe('submission detail page helpers', () => {
     expect(router.push).not.toHaveBeenCalled();
   });
 
-  it('falls back to queue-scoped results when a results-origin visit has no history', () => {
+  it('falls back to the sanitized contextual results URL when a results-origin visit has no history', () => {
     const router = {
       back: mock(() => undefined),
       push: mock((_href: string) => undefined),
@@ -221,11 +257,14 @@ describe('submission detail page helpers', () => {
     handleSubmissionDetailBack({
       queueId: 'queue-1',
       source: 'results',
+      resultsHref: '/queues/queue-1/results?page=3&judgeId=judge-1&questionId=question-1&verdict=pass',
       router,
       historyLength: 1,
     });
 
-    expect(router.push).toHaveBeenLastCalledWith('/queues/queue-1/results');
+    expect(router.push).toHaveBeenLastCalledWith(
+      '/queues/queue-1/results?page=3&judgeId=judge-1&questionId=question-1&verdict=pass'
+    );
   });
 });
 
@@ -250,11 +289,12 @@ describe('SubmissionDetailPageContent', () => {
     expect(html).not.toContain('href="/queues/queue-1/results"');
   });
 
-  it('renders results-origin error state with results-scoped return copy and breadcrumbs', () => {
+  it('renders results-origin error state with contextual results return copy and breadcrumbs', () => {
     const html = renderToStaticMarkup(
       <SubmissionDetailPageContent
         queueId="queue-1"
         source="results"
+        resultsHref="/queues/queue-1/results?page=3&judgeId=judge-1&questionId=question-1&verdict=pass"
         isLoading={false}
         error={new Error('Submission not found for queue.')}
         onRetry={() => undefined}
@@ -265,7 +305,9 @@ describe('SubmissionDetailPageContent', () => {
     expect(html).toContain('Back to results');
     expect(html).toContain('href="/queues"');
     expect(html).toContain('href="/queues/queue-1"');
-    expect(html).toContain('href="/queues/queue-1/results"');
+    expect(html).toContain(
+      'href="/queues/queue-1/results?page=3&amp;judgeId=judge-1&amp;questionId=question-1&amp;verdict=pass"'
+    );
     expect(html).toContain('Results');
     expect(html).toContain('Submission not found for queue.');
     expect(html).toContain('Retry');
@@ -276,6 +318,7 @@ describe('SubmissionDetailPageContent', () => {
       <SubmissionDetailPageContent
         queueId="queue-1"
         source="results"
+        resultsHref="/queues/queue-1/results?page=3&judgeId=judge-1&questionId=question-1&verdict=pass"
         detail={{
           ...createDetailResponse(),
           attachments: [
@@ -309,7 +352,9 @@ describe('SubmissionDetailPageContent', () => {
     );
 
     expect(html).toContain('Back to results');
-    expect(html).toContain('href="/queues/queue-1/results"');
+    expect(html).toContain(
+      'href="/queues/queue-1/results?page=3&amp;judgeId=judge-1&amp;questionId=question-1&amp;verdict=pass"'
+    );
     expect(html).toContain('Submission detail');
     expect(html).toContain('Attachments');
     expect(html).toContain('review-evidence.pdf');

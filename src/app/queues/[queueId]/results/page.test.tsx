@@ -124,30 +124,20 @@ describe('buildResultsQueryString', () => {
 });
 
 describe('buildResultsPageHref', () => {
-  it('preserves unrelated search params while replacing page and filter params with canonical state', () => {
+  it('serializes only the whitelisted reviewer-truth results params into the page href', () => {
     expect(
-      buildResultsPageHref(
-        '/queues/queue-1/results',
-        {
-          source: 'reviewer',
-          page: '999',
-          judgeId: ['stale-judge'],
-          questionId: 'stale-question',
-          verdict: ['maybe'],
-        },
-        {
-          page: 2,
-          selectedJudges: ['judge-1'],
-          selectedQuestions: ['question-1'],
-          selectedVerdicts: ['pass'],
-        }
-      )
-    ).toBe('/queues/queue-1/results?source=reviewer&page=2&judgeId=judge-1&questionId=question-1&verdict=pass');
+      buildResultsPageHref('/queues/queue-1/results', {
+        page: 2,
+        selectedJudges: ['judge-1'],
+        selectedQuestions: ['question-1'],
+        selectedVerdicts: ['pass'],
+      })
+    ).toBe('/queues/queue-1/results?page=2&judgeId=judge-1&questionId=question-1&verdict=pass');
   });
 });
 
 describe('resolveResultsPageSyncHref', () => {
-  it('requests a URL rewrite for missing, duplicated, stale, or clamped filter state and skips already-canonical URLs', () => {
+  it('requests a URL rewrite for missing, duplicated, stale, or non-whitelisted params and skips already-canonical URLs', () => {
     const canonicalState = {
       page: 2,
       selectedJudges: ['judge-1'],
@@ -176,7 +166,7 @@ describe('resolveResultsPageSyncHref', () => {
         },
         canonicalState
       )
-    ).toBe('/queues/queue-1/results?source=reviewer&page=2&judgeId=judge-1&questionId=question-1&verdict=pass');
+    ).toBe('/queues/queue-1/results?page=2&judgeId=judge-1&questionId=question-1&verdict=pass');
 
     expect(
       resolveResultsPageSyncHref(
@@ -288,7 +278,13 @@ describe('ResultsPageContent', () => {
     expect(html).toContain('Pass rate across completed evaluations in the current filter set.');
     expect(html).toContain('Pass rate is based on 1 completed evaluation out of 250 matching the current filters.');
     expect(html).toContain('SUB-001');
-    expect(html).toContain('href="/queues/queue-1/submissions/submission-1?source=results"');
+    expect(html).toContain(
+      'href="/queues/queue-1/submissions/submission-1?source=results&amp;page=5&amp;judgeId=judge-1&amp;questionId=question-1&amp;verdict=pass"'
+    );
+    expect(html).toContain('data-audit-toggle="icon"');
+    expect(html).toContain(
+      'aria-label="Expand audit details for submission SUB-001 from the reasoning cell"'
+    );
     expect(html).toContain('href="/queues/queue-1/results?page=4&amp;judgeId=judge-1&amp;questionId=question-1&amp;verdict=pass"');
     expect(html).toContain('href="/queues/queue-1/results?page=6&amp;judgeId=judge-1&amp;questionId=question-1&amp;verdict=pass"');
     expect(html).toContain('href="/queues/queue-1/results?page=1&amp;judgeId=judge-1&amp;questionId=question-1&amp;verdict=pass"');
@@ -331,8 +327,8 @@ describe('ResultsPageContent', () => {
     const html = renderToStaticMarkup(
       <ResultsPageContent
         queueId="queue-1"
-        judges={[JUDGES[0]! ]}
-        questions={[QUESTIONS[0]! ]}
+        judges={[JUDGES[0]!]}
+        questions={[QUESTIONS[0]!]}
         availableVerdicts={['pass']}
         results={createResultsResponse({
           evaluations: [],

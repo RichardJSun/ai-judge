@@ -2,6 +2,7 @@ import { describe, expect, it } from 'bun:test';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { ResultsEvaluation } from '@/types/api';
 import { REVIEWER_TABLE_SURFACE_TEST_ID } from '@/components/layout/ReviewerTableSurface';
+import type { ResultsPageUrlState } from '@/lib/results/results-page-url';
 import ResultsTable, { formatCreatedAt, summarizeReasoning } from './ResultsTable';
 
 const QUEUE_ID = 'queue-1';
@@ -13,6 +14,13 @@ const LONG_REASONING = [
 
 const DEFAULT_PROMPT_SNAPSHOT =
   'Prompt snapshot content describing stored attachments and forwarding.\nPlan marker: {"version":1,"kind":"text-only","forwardingRequested":false}';
+
+const FILTERED_RESULTS_CONTEXT: ResultsPageUrlState = {
+  page: 4,
+  selectedJudges: ['judge-1'],
+  selectedQuestions: ['question-1'],
+  selectedVerdicts: ['pass'],
+};
 
 function createEvaluation(overrides: Partial<ResultsEvaluation> = {}): ResultsEvaluation {
   return {
@@ -56,9 +64,15 @@ describe('summarizeReasoning', () => {
 });
 
 describe('ResultsTable', () => {
-  it('renders the shared reviewer overflow surface around reviewer-visible result fields and uses the submission cell as the detail entrypoint', () => {
+  it('renders the shared reviewer overflow surface around reviewer-visible result fields, keeps the submission link intentional, and exposes safe audit hit areas in the non-link cells', () => {
     const evaluation = createEvaluation();
-    const html = renderToStaticMarkup(<ResultsTable queueId={QUEUE_ID} evaluations={[evaluation]} />);
+    const html = renderToStaticMarkup(
+      <ResultsTable
+        queueId={QUEUE_ID}
+        evaluations={[evaluation]}
+        resultsContext={FILTERED_RESULTS_CONTEXT}
+      />
+    );
 
     expect(html).toContain(`data-testid="${REVIEWER_TABLE_SURFACE_TEST_ID}"`);
     expect(html).toContain('data-overflow-surface="reviewer-table"');
@@ -73,9 +87,31 @@ describe('ResultsTable', () => {
 
     expect(html).toContain(evaluation.submission.external_id);
     expect(html).toContain(
-      `href="/queues/${QUEUE_ID}/submissions/${evaluation.submission.id}?source=results"`
+      `href="/queues/${QUEUE_ID}/submissions/${evaluation.submission.id}?source=results&amp;page=4&amp;judgeId=judge-1&amp;questionId=question-1&amp;verdict=pass"`
     );
     expect(html).toContain(`aria-label="Open submission ${evaluation.submission.external_id} from results"`);
+    expect(html).toContain('data-audit-toggle="icon"');
+    expect(html).toContain(
+      `aria-label="Expand audit details for submission ${evaluation.submission.external_id}"`
+    );
+    expect(html).toContain(
+      `aria-label="Expand audit details for submission ${evaluation.submission.external_id} from the question cell"`
+    );
+    expect(html).toContain(
+      `aria-label="Expand audit details for submission ${evaluation.submission.external_id} from the judge cell"`
+    );
+    expect(html).toContain(
+      `aria-label="Expand audit details for submission ${evaluation.submission.external_id} from the verdict cell"`
+    );
+    expect(html).toContain(
+      `aria-label="Expand audit details for submission ${evaluation.submission.external_id} from the reasoning cell"`
+    );
+    expect(html).toContain(
+      `aria-label="Expand audit details for submission ${evaluation.submission.external_id} from the created cell"`
+    );
+    expect(html.split('data-audit-toggle="hit-area"')).toHaveLength(6);
+    expect(html).toContain('aria-controls="results-audit-details-evaluation-1"');
+    expect(html).toContain('aria-expanded="false"');
     expect(html).toContain(evaluation.question.external_id);
     expect(html).toContain(evaluation.question.question_text);
     expect(html).toContain(evaluation.judge.name);
@@ -91,7 +127,7 @@ describe('ResultsTable', () => {
     expect(html).toContain('Forwarding requested');
   });
 
-  it('keeps errored rows with long submission ids and missing optional audit fields renderable behind a valid detail link', () => {
+  it('falls back to the canonical results root context for long-id error rows with missing optional audit fields instead of dropping the detail link', () => {
     const longExternalId = 'SUBMISSION-EXTERNAL-ID-WITH-A-LONG-MONOSPACE-VISIBLE-VALUE-0001';
     const html = renderToStaticMarkup(
       <ResultsTable
@@ -119,7 +155,13 @@ describe('ResultsTable', () => {
 
     expect(html).toContain(`data-testid="${REVIEWER_TABLE_SURFACE_TEST_ID}"`);
     expect(html).toContain(longExternalId);
-    expect(html).toContain(`href="/queues/${QUEUE_ID}/submissions/submission-2?source=results"`);
+    expect(html).toContain(
+      `href="/queues/${QUEUE_ID}/submissions/submission-2?source=results&amp;page=1"`
+    );
+    expect(html).toContain(`aria-label="Open submission ${longExternalId} from results"`);
+    expect(html).toContain(
+      `aria-label="Expand audit details for submission ${longExternalId} from the reasoning cell"`
+    );
     expect(html).toContain('Judge Atlas');
     expect(html).toContain('Error');
     expect(html).toContain('—');
@@ -133,18 +175,16 @@ describe('ResultsTable', () => {
     const blockedHtml = renderToStaticMarkup(
       <ResultsTable
         queueId={QUEUE_ID}
-        evaluations={
-          [
-            createEvaluation({
-              id: 'evaluation-3',
-              verdict: null,
-              status: 'error',
-              prompt_snapshot:
-                'Forwarding requested: yes\nPlan: blocked\nPlan marker: {"version":1,"kind":"blocked","forwardingRequested":true,"blockedReason":"forwarding disabled"}',
-              error_message: 'forwarding disabled',
-            }),
-          ]
-        }
+        evaluations={[
+          createEvaluation({
+            id: 'evaluation-3',
+            verdict: null,
+            status: 'error',
+            prompt_snapshot:
+              'Forwarding requested: yes\nPlan: blocked\nPlan marker: {"version":1,"kind":"blocked","forwardingRequested":true,"blockedReason":"forwarding disabled"}',
+            error_message: 'forwarding disabled',
+          }),
+        ]}
       />
     );
 
@@ -155,7 +195,7 @@ describe('ResultsTable', () => {
     expect(blockedHtml).toContain('forwarding disabled');
   });
 
-  it('renders multiple visible rows for the same submission without adding a separate action column', () => {
+  it('renders multiple visible rows for the same submission without adding a separate action column and preserves the contextual detail href on each row', () => {
     const firstEvaluation = createEvaluation();
     const secondEvaluation = createEvaluation({
       id: 'evaluation-2',
@@ -166,14 +206,21 @@ describe('ResultsTable', () => {
       },
     });
     const html = renderToStaticMarkup(
-      <ResultsTable queueId={QUEUE_ID} evaluations={[firstEvaluation, secondEvaluation]} />
+      <ResultsTable
+        queueId={QUEUE_ID}
+        evaluations={[firstEvaluation, secondEvaluation]}
+        resultsContext={FILTERED_RESULTS_CONTEXT}
+      />
     );
 
-    const href = `href="/queues/${QUEUE_ID}/submissions/${firstEvaluation.submission.id}?source=results"`;
+    const href =
+      `href="/queues/${QUEUE_ID}/submissions/${firstEvaluation.submission.id}` +
+      '?source=results&amp;page=4&amp;judgeId=judge-1&amp;questionId=question-1&amp;verdict=pass"';
 
     expect(html.split(href)).toHaveLength(3);
+    expect(html.split('data-audit-toggle="icon"')).toHaveLength(3);
+    expect(html.split('data-audit-toggle="hit-area"')).toHaveLength(11);
     expect(html).toContain('A second visible question for the same submission.');
-    expect(html).toContain('Expand audit details');
     expect(html).not.toContain('Actions');
     expect(html).not.toContain('View');
   });

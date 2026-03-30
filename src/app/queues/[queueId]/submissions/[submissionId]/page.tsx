@@ -17,6 +17,7 @@ import {
   fetchJson,
   parseSubmissionDetailResponse,
 } from '@/lib/submissions/fetch-json';
+import { buildQueueResultsHref, type ResultsPageSearchParams } from '@/lib/results/results-page-url';
 import type { SubmissionDetailResponse } from '@/types/api';
 
 export function getSubmissionDetailQueryKey(queueId: string, submissionId: string) {
@@ -35,6 +36,14 @@ export function fetchSubmissionDetail(queueId: string, submissionId: string) {
 }
 
 export type SubmissionDetailNavigationSource = 'queue' | 'results';
+export type SubmissionDetailSearchParams = ResultsPageSearchParams & {
+  source?: string | string[] | undefined;
+};
+
+export interface SubmissionDetailNavigationContext {
+  source: SubmissionDetailNavigationSource;
+  resultsHref: string | null;
+}
 
 export function parseSubmissionDetailNavigationSource(
   source: string | string[] | undefined
@@ -42,11 +51,24 @@ export function parseSubmissionDetailNavigationSource(
   return source === 'results' ? 'results' : 'queue';
 }
 
+export function resolveSubmissionDetailNavigationContext(
+  queueId: string,
+  searchParams: SubmissionDetailSearchParams
+): SubmissionDetailNavigationContext {
+  const source = parseSubmissionDetailNavigationSource(searchParams.source);
+
+  return {
+    source,
+    resultsHref: source === 'results' ? buildQueueResultsHref(queueId, searchParams) : null,
+  };
+}
+
 export function getSubmissionDetailBackHref(
   queueId: string,
-  source: SubmissionDetailNavigationSource
+  source: SubmissionDetailNavigationSource,
+  resultsHref?: string | null
 ) {
-  return source === 'results' ? `/queues/${queueId}/results` : `/queues/${queueId}`;
+  return source === 'results' ? resultsHref ?? buildQueueResultsHref(queueId, {}) : `/queues/${queueId}`;
 }
 
 export function getSubmissionDetailBackLabel(source: SubmissionDetailNavigationSource) {
@@ -61,11 +83,13 @@ export interface SubmissionDetailBackNavigationRouter {
 export function handleSubmissionDetailBack({
   queueId,
   source,
+  resultsHref,
   router,
   historyLength,
 }: {
   queueId: string;
   source: SubmissionDetailNavigationSource;
+  resultsHref?: string | null;
   router: SubmissionDetailBackNavigationRouter;
   historyLength: number;
 }) {
@@ -74,12 +98,13 @@ export function handleSubmissionDetailBack({
     return;
   }
 
-  router.push(getSubmissionDetailBackHref(queueId, source));
+  router.push(getSubmissionDetailBackHref(queueId, source, resultsHref));
 }
 
 export interface SubmissionDetailPageContentProps {
   queueId: string;
   source: SubmissionDetailNavigationSource;
+  resultsHref?: string | null;
   detail?: SubmissionDetailResponse;
   isLoading: boolean;
   error: Error | null;
@@ -90,19 +115,23 @@ export interface SubmissionDetailPageContentProps {
 export function SubmissionDetailPageContent({
   queueId,
   source,
+  resultsHref,
   detail,
   isLoading,
   error,
   onRetry,
   onBack,
 }: SubmissionDetailPageContentProps) {
+  const backHref = getSubmissionDetailBackHref(queueId, source, resultsHref);
+
   return (
     <>
       <ReviewerWayfinding
         title="Submission detail"
         backLabel={getSubmissionDetailBackLabel(source)}
+        backHref={backHref}
         onBack={onBack}
-        breadcrumbs={createSubmissionDetailBreadcrumbs(queueId, source)}
+        breadcrumbs={createSubmissionDetailBreadcrumbs(queueId, source, 'Submission detail', resultsHref ?? undefined)}
       />
 
       {isLoading ? (
@@ -141,11 +170,11 @@ export default function SubmissionDetailPage({
   searchParams,
 }: {
   params: Promise<{ queueId: string; submissionId: string }>;
-  searchParams: Promise<{ source?: string | string[] | undefined }>;
+  searchParams: Promise<SubmissionDetailSearchParams>;
 }) {
   const { queueId, submissionId } = use(params);
-  const { source } = use(searchParams);
-  const navigationSource = parseSubmissionDetailNavigationSource(source);
+  const resolvedSearchParams = use(searchParams);
+  const navigationContext = resolveSubmissionDetailNavigationContext(queueId, resolvedSearchParams);
   const router = useRouter();
   const queryKey = getSubmissionDetailQueryKey(queueId, submissionId);
 
@@ -158,7 +187,8 @@ export default function SubmissionDetailPage({
   return (
     <SubmissionDetailPageContent
       queueId={queueId}
-      source={navigationSource}
+      source={navigationContext.source}
+      resultsHref={navigationContext.resultsHref}
       detail={query.data}
       isLoading={query.isLoading && !query.data}
       error={query.error}
@@ -166,7 +196,8 @@ export default function SubmissionDetailPage({
       onBack={() =>
         handleSubmissionDetailBack({
           queueId,
-          source: navigationSource,
+          source: navigationContext.source,
+          resultsHref: navigationContext.resultsHref,
           router,
           historyLength: typeof window === 'undefined' ? 0 : window.history.length,
         })
