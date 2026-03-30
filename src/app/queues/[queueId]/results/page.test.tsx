@@ -69,6 +69,11 @@ function createResultsResponse(overrides: Partial<ResultsResponse> = {}): Result
     ],
     page: 1,
     pageSize: 10,
+    filterMetadata: {
+      judges: JUDGES.map(({ id, name, model }) => ({ id, name, model })),
+      questions: QUESTIONS,
+      verdicts: ['pass'],
+    },
     ...overrides,
   };
 }

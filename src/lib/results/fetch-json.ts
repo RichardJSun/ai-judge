@@ -1,8 +1,19 @@
 import { z } from 'zod';
-import type { ResultsResponse } from '@/types/api';
+import type {
+  ResultsFilterJudge as ApiResultsFilterJudge,
+  ResultsFilterMetadata as ApiResultsFilterMetadata,
+  ResultsFilterQuestion as ApiResultsFilterQuestion,
+  ResultsResponse,
+} from '@/types/api';
 
 const VerdictSchema = z.enum(['pass', 'fail', 'inconclusive']);
 const EvalStatusSchema = z.enum(['pending', 'running', 'completed', 'error']);
+
+const ResultsFilterJudgeSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  model: z.string().min(1),
+});
 
 const ResultsFilterQuestionSchema = z.object({
   id: z.string().min(1),
@@ -11,6 +22,12 @@ const ResultsFilterQuestionSchema = z.object({
 });
 
 const ResultsFilterQuestionListSchema = z.array(ResultsFilterQuestionSchema);
+
+const ResultsFilterMetadataSchema = z.object({
+  judges: z.array(ResultsFilterJudgeSchema),
+  questions: z.array(ResultsFilterQuestionSchema),
+  verdicts: z.array(VerdictSchema),
+});
 
 const ResultsResponseSchema = z.object({
   evaluations: z.array(
@@ -54,9 +71,12 @@ const ResultsResponseSchema = z.object({
   ),
   page: z.number().int().positive(),
   pageSize: z.number().int().positive(),
+  filterMetadata: ResultsFilterMetadataSchema,
 });
 
-export type ResultsFilterQuestion = z.infer<typeof ResultsFilterQuestionSchema>;
+export type ResultsFilterJudge = ApiResultsFilterJudge;
+export type ResultsFilterQuestion = ApiResultsFilterQuestion;
+export type ResultsFilterMetadata = ApiResultsFilterMetadata;
 
 interface FetchJsonOptions<T> {
   fallbackMessage: string;
@@ -80,6 +100,18 @@ export function parseResultsFilterQuestionList(
   context = 'queue questions response'
 ): ResultsFilterQuestion[] {
   const parsed = ResultsFilterQuestionListSchema.safeParse(value);
+  if (!parsed.success) {
+    throw new Error(`Malformed ${context}: ${parsed.error.message}`);
+  }
+
+  return parsed.data;
+}
+
+export function parseResultsFilterMetadata(
+  value: unknown,
+  context = 'results filter metadata'
+): ResultsFilterMetadata {
+  const parsed = ResultsFilterMetadataSchema.safeParse(value);
   if (!parsed.success) {
     throw new Error(`Malformed ${context}: ${parsed.error.message}`);
   }

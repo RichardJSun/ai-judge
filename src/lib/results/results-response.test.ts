@@ -19,7 +19,7 @@ function createEvaluationRow(overrides: Record<string, unknown> = {}) {
     error_message: null,
     created_at: '2026-03-28T12:00:00.000Z',
     status: 'completed',
-    submissions: [{ id: 'submission-1', external_id: 'SUB-001' }],
+    submissions: [{ id: 'submission-1', external_id: 'SUB-001', queue_id: 'queue-1' }],
     question_templates: [{ id: 'question-1', external_id: 'Q-001', question_text: 'Was the answer correct?' }],
     judges: [{ id: 'judge-1', name: 'Judge Zeta', model: 'gateway/model-a' }],
     ...overrides,
@@ -32,6 +32,17 @@ function createAggregateRow(overrides: Record<string, unknown> = {}) {
     verdict: 'pass',
     status: 'completed',
     judges: [{ id: 'judge-1', name: 'Judge Zeta' }],
+    submissions: [{ queue_id: 'queue-1' }],
+    ...overrides,
+  };
+}
+
+function createFilterMetadataRow(overrides: Record<string, unknown> = {}) {
+  return {
+    verdict: 'pass',
+    submissions: [{ queue_id: 'queue-1' }],
+    question_templates: [{ id: 'question-1', external_id: 'Q-001', question_text: 'Was the answer correct?' }],
+    judges: [{ id: 'judge-1', name: 'Judge Zeta', model: 'gateway/model-a' }],
     ...overrides,
   };
 }
@@ -46,11 +57,13 @@ class QuerySpy {
 }
 
 describe('normalizeResultsFilters', () => {
-  it('dedupes filter params, rejects invalid verdicts, and normalizes malformed page values', () => {
+  it('dedupes string filters, trims blanks, and reuses list-page normalization for malformed pages', () => {
     const params = new URLSearchParams([
       ['judgeId', 'judge-1'],
-      ['judgeId', 'judge-1'],
+      ['judgeId', ' judge-1 '],
+      ['judgeId', ''],
       ['questionId', 'question-1'],
+      ['questionId', '   '],
       ['verdict', 'pass'],
       ['page', '0'],
     ]);
@@ -62,6 +75,13 @@ describe('normalizeResultsFilters', () => {
       page: 1,
       pageSize: 25,
       from: 0,
+      to: 24,
+    });
+
+    expect(normalizeResultsFilters(new URLSearchParams([['page', '999999999999999999999999']]))).toMatchObject({
+      page: 1,
+      from: 0,
+      to: 24,
     });
 
     expect(() => normalizeResultsFilters(new URLSearchParams([['verdict', 'maybe']])))
@@ -110,8 +130,9 @@ describe('applyResultsFilters', () => {
 });
 
 describe('createResultsResponse', () => {
-  it('maps joined Supabase rows to the stable singular contract and computes filtered aggregates from completed rows', () => {
+  it('maps joined Supabase rows to the stable contract and derives queue-truth filter metadata', () => {
     const response = createResultsResponse({
+      queueId: 'queue-1',
       evaluationRows: [
         createEvaluationRow(),
         createEvaluationRow({
@@ -119,7 +140,7 @@ describe('createResultsResponse', () => {
           verdict: 'fail',
           reasoning: 'Missing required evidence.',
           retry_count: 0,
-          submissions: [{ id: 'submission-2', external_id: 'SUB-002' }],
+          submissions: [{ id: 'submission-2', external_id: 'SUB-002', queue_id: 'queue-1' }],
         }),
       ],
       aggregateRows: [
@@ -130,6 +151,15 @@ describe('createResultsResponse', () => {
         createAggregateRow({ verdict: 'fail' }),
         createAggregateRow(),
         createAggregateRow({ verdict: null, status: 'error' }),
+      ],
+      filterMetadataRows: [
+        createFilterMetadataRow(),
+        createFilterMetadataRow({
+          verdict: 'fail',
+          question_templates: [{ id: 'question-2', external_id: 'Q-002', question_text: 'Was evidence cited?' }],
+          judges: [{ id: 'judge-2', name: 'Judge Alpha', model: 'gateway/model-b' }],
+        }),
+        createFilterMetadataRow({ verdict: null }),
       ],
       total: 2,
       page: 1,
@@ -179,6 +209,17 @@ describe('createResultsResponse', () => {
       ],
       page: 1,
       pageSize: 25,
+      filterMetadata: {
+        judges: [
+          { id: 'judge-2', name: 'Judge Alpha', model: 'gateway/model-b' },
+          { id: 'judge-1', name: 'Judge Zeta', model: 'gateway/model-a' },
+        ],
+        questions: [
+          { id: 'question-1', external_id: 'Q-001', question_text: 'Was the answer correct?' },
+          { id: 'question-2', external_id: 'Q-002', question_text: 'Was evidence cited?' },
+        ],
+        verdicts: ['pass', 'fail'],
+      },
     });
 
     expect('submissions' in response.evaluations[0]).toBe(false);
@@ -186,11 +227,13 @@ describe('createResultsResponse', () => {
     expect('judges' in response.evaluations[0]).toBe(false);
   });
 
-  it('returns zeroed aggregates for empty result sets and filtered subsets with only errored rows', () => {
+  it('returns zeroed aggregates and empty filter metadata for empty result sets', () => {
     expect(
       createResultsResponse({
+        queueId: 'queue-1',
         evaluationRows: [],
         aggregateRows: [],
+        filterMetadataRows: [],
         total: 0,
         page: 1,
         pageSize: 25,
@@ -202,28 +245,51 @@ describe('createResultsResponse', () => {
       judgePassRates: [],
       page: 1,
       pageSize: 25,
-    });
-
-    expect(
-      createResultsResponse({
-        evaluationRows: [createEvaluationRow({ status: 'error', verdict: null, reasoning: null })],
-        aggregateRows: [createAggregateRow({ status: 'error', verdict: null })],
-        total: 1,
-        page: 1,
-        pageSize: 25,
-      })
-    ).toMatchObject({
-      total: 1,
-      passRate: 0,
-      judgePassRates: [],
+      filterMetadata: {
+        judges: [],
+        questions: [],
+        verdicts: [],
+      },
     });
   });
 
-  it('rejects malformed joined relation data before the UI can consume mismatched fields', () => {
+  it('rejects non-canonical page metadata instead of pairing empty rows with contradictory totals', () => {
+    expect(() =>
+      createResultsResponse({
+        queueId: 'queue-1',
+        evaluationRows: [],
+        aggregateRows: [],
+        filterMetadataRows: [],
+        total: 1,
+        page: 2,
+        pageSize: 25,
+      })
+    ).toThrowError(ResultsResponseError);
+
     try {
       createResultsResponse({
+        queueId: 'queue-1',
+        evaluationRows: [],
+        aggregateRows: [],
+        filterMetadataRows: [],
+        total: 1,
+        page: 2,
+        pageSize: 25,
+      });
+      throw new Error('Expected non-canonical page metadata to throw.');
+    } catch (error) {
+      expect(error).toBeInstanceOf(ResultsResponseError);
+      expect((error as ResultsResponseError).publicMessage).toBe('Malformed results pagination returned from storage.');
+    }
+  });
+
+  it('rejects malformed joined relations and foreign-queue metadata before the UI can consume leaked scope', () => {
+    try {
+      createResultsResponse({
+        queueId: 'queue-1',
         evaluationRows: [createEvaluationRow({ judges: null })],
         aggregateRows: [],
+        filterMetadataRows: [],
         total: 1,
         page: 1,
         pageSize: 25,
@@ -232,6 +298,22 @@ describe('createResultsResponse', () => {
     } catch (error) {
       expect(error).toBeInstanceOf(ResultsResponseError);
       expect((error as ResultsResponseError).publicMessage).toBe('Malformed judge returned from storage.');
+    }
+
+    try {
+      createResultsResponse({
+        queueId: 'queue-1',
+        evaluationRows: [],
+        aggregateRows: [],
+        filterMetadataRows: [createFilterMetadataRow({ submissions: [{ queue_id: 'queue-2' }] })],
+        total: 0,
+        page: 1,
+        pageSize: 25,
+      });
+      throw new Error('Expected foreign queue metadata to throw.');
+    } catch (error) {
+      expect(error).toBeInstanceOf(ResultsResponseError);
+      expect((error as ResultsResponseError).publicMessage).toBe('Malformed queue-scoped results returned from storage.');
     }
   });
 });

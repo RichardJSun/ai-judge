@@ -83,6 +83,16 @@ function createResultsResponse(overrides: Partial<ResultsResponse> = {}): Result
     ],
     page: 1,
     pageSize: 50,
+    filterMetadata: {
+      judges: [
+        { id: 'judge-invalid-1', name: 'Verifier Invalid', model: 'openai/not-a-real-model-s04-live' },
+        { id: 'judge-valid-1', name: 'Verifier Valid', model: 'openai/gpt-4o-mini' },
+      ],
+      questions: [
+        { id: 'question-1', external_id: 'question-external-1', question_text: 'Question one?' },
+      ],
+      verdicts: ['pass'],
+    },
     ...overrides,
   };
 }

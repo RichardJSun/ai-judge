@@ -55,6 +55,15 @@ function createResponse(overrides: Partial<ResultsResponse> = {}): ResultsRespon
     ],
     page: 1,
     pageSize: 25,
+    filterMetadata: {
+      judges: [
+        { id: 'judge-valid', name: 'Verifier Valid', model: 'openai/gpt-4o-mini' },
+      ],
+      questions: [
+        { id: 'question-1', external_id: 'q-1', question_text: 'Does the answer cite evidence?' },
+      ],
+      verdicts: ['pass'],
+    },
     ...overrides,
   };
 }

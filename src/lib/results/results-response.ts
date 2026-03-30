@@ -1,6 +1,8 @@
+import { normalizeListPageRequest, resolveListPage, type ResolvedListPage } from '@/lib/pagination/list-page';
 import type {
   JudgePassRate,
   ResultsEvaluation,
+  ResultsFilterMetadata,
   ResultsResponse,
 } from '@/types/api';
 import type { EvalStatusEnum, VerdictEnum } from '@/types/db';
@@ -16,11 +18,14 @@ export interface ResultsQueryFilters {
   page: number;
   pageSize: number;
   from: number;
+  to: number;
 }
 
 export interface ResultsResponseInput {
+  queueId: string;
   evaluationRows: unknown[];
   aggregateRows: unknown[];
+  filterMetadataRows: unknown[];
   total: number | null | undefined;
   page: number;
   pageSize: number;
@@ -42,7 +47,9 @@ export function normalizeResultsFilters(
   searchParams: URLSearchParams,
   options: { pageSize?: number } = {}
 ): ResultsQueryFilters {
-  const pageSize = normalizePositiveInteger(options.pageSize ?? DEFAULT_RESULTS_PAGE_SIZE, 'pageSize');
+  const pageRequest = normalizeListPageRequest(searchParams, {
+    pageSize: options.pageSize ?? DEFAULT_RESULTS_PAGE_SIZE,
+  });
   const judgeIds = normalizeStringList(searchParams.getAll('judgeId'));
   const questionIds = normalizeStringList(searchParams.getAll('questionId'));
   const verdictParams = normalizeStringList(searchParams.getAll('verdict'));
@@ -57,18 +64,19 @@ export function normalizeResultsFilters(
     });
   }
 
-  const rawPage = searchParams.get('page');
-  const parsedPage = rawPage == null ? 1 : Number.parseInt(rawPage, 10);
-  const page = Number.isInteger(parsedPage) && parsedPage > 0 ? parsedPage : 1;
-
   return {
     judgeIds,
     questionIds,
     verdicts: verdictParams as VerdictEnum[],
-    page,
-    pageSize,
-    from: (page - 1) * pageSize,
+    ...pageRequest,
   };
+}
+
+export function resolveResultsPage(
+  request: Pick<ResultsQueryFilters, 'page' | 'pageSize'>,
+  total: unknown
+): ResolvedListPage {
+  return resolveListPage(request, total);
 }
 
 export function applyResultsFilters<T extends { in(column: string, values: readonly string[]): T }>(
@@ -93,24 +101,28 @@ export function applyResultsFilters<T extends { in(column: string, values: reado
 }
 
 export function createResultsResponse({
+  queueId,
   evaluationRows,
   aggregateRows,
+  filterMetadataRows,
   total,
   page,
   pageSize,
 }: ResultsResponseInput): ResultsResponse {
-  const evaluations = evaluationRows.map(normalizeResultsEvaluation);
-  const aggregates = aggregateRows.map(normalizeAggregateRow);
+  const resolvedPage = normalizeCanonicalResultsPage({ page, pageSize }, total);
+  const evaluations = evaluationRows.map((row) => normalizeResultsEvaluation(row, queueId));
+  const aggregates = aggregateRows.map((row) => normalizeAggregateRow(row, queueId));
   const completedAggregates = aggregates.filter((row) => row.status === 'completed');
   const passCount = completedAggregates.filter((row) => row.verdict === 'pass').length;
 
   return {
     evaluations,
-    total: normalizeNonNegativeInteger(total, 'results.total'),
+    total: resolvedPage.total,
     passRate: completedAggregates.length > 0 ? Math.round((passCount / completedAggregates.length) * 100) : 0,
     judgePassRates: buildJudgePassRates(completedAggregates),
-    page: normalizePositiveInteger(page, 'results.page'),
-    pageSize: normalizePositiveInteger(pageSize, 'results.pageSize'),
+    page: resolvedPage.page,
+    pageSize: resolvedPage.pageSize,
+    filterMetadata: buildFilterMetadata(filterMetadataRows, queueId),
   };
 }
 
@@ -122,6 +134,55 @@ interface AggregateRow {
     id: string;
     name: string;
   };
+}
+
+interface FilterMetadataRow {
+  verdict: VerdictEnum | null;
+  judge: {
+    id: string;
+    name: string;
+    model: string;
+  };
+  question: {
+    id: string;
+    external_id: string | null;
+    question_text: string;
+  };
+}
+
+function normalizeCanonicalResultsPage(
+  request: Pick<ResultsResponseInput, 'page' | 'pageSize'>,
+  total: unknown
+): ResolvedListPage {
+  try {
+    const resolvedPage = resolveResultsPage(
+      {
+        page: normalizePositiveInteger(request.page, 'results.page'),
+        pageSize: normalizePositiveInteger(request.pageSize, 'results.pageSize'),
+      },
+      total
+    );
+
+    if (resolvedPage.wasClamped) {
+      throw new ResultsResponseError(
+        `Results page ${request.page} was not canonical for total ${String(total)} and page size ${request.pageSize}.`,
+        {
+          publicMessage: 'Malformed results pagination returned from storage.',
+        }
+      );
+    }
+
+    return resolvedPage;
+  } catch (error) {
+    if (error instanceof ResultsResponseError) {
+      throw error;
+    }
+
+    throw new ResultsResponseError('Failed to normalize results pagination metadata.', {
+      publicMessage: 'Malformed results pagination returned from storage.',
+      cause: error,
+    });
+  }
 }
 
 function buildJudgePassRates(rows: AggregateRow[]): JudgePassRate[] {
@@ -168,11 +229,70 @@ function buildJudgePassRates(rows: AggregateRow[]): JudgePassRate[] {
     .sort((a, b) => a.name.localeCompare(b.name) || a.judgeId.localeCompare(b.judgeId));
 }
 
-function normalizeResultsEvaluation(row: unknown): ResultsEvaluation {
+function buildFilterMetadata(rows: unknown[], queueId: string): ResultsFilterMetadata {
+  const judges = new Map<string, ResultsFilterMetadata['judges'][number]>();
+  const questions = new Map<string, ResultsFilterMetadata['questions'][number]>();
+  const verdicts = new Set<VerdictEnum>();
+
+  for (const row of rows) {
+    const metadata = normalizeFilterMetadataRow(row, queueId);
+    const existingJudge = judges.get(metadata.judge.id);
+    const existingQuestion = questions.get(metadata.question.id);
+
+    if (
+      existingJudge &&
+      (existingJudge.name !== metadata.judge.name || existingJudge.model !== metadata.judge.model)
+    ) {
+      throw new ResultsResponseError(
+        `Filter metadata judge ${metadata.judge.id} returned conflicting values.`,
+        { publicMessage: 'Malformed filter metadata returned from storage.' }
+      );
+    }
+
+    if (
+      existingQuestion &&
+      (
+        existingQuestion.external_id !== metadata.question.external_id ||
+        existingQuestion.question_text !== metadata.question.question_text
+      )
+    ) {
+      throw new ResultsResponseError(
+        `Filter metadata question ${metadata.question.id} returned conflicting values.`,
+        { publicMessage: 'Malformed filter metadata returned from storage.' }
+      );
+    }
+
+    judges.set(metadata.judge.id, metadata.judge);
+    questions.set(metadata.question.id, metadata.question);
+
+    if (metadata.verdict) {
+      verdicts.add(metadata.verdict);
+    }
+  }
+
+  return {
+    judges: [...judges.values()].sort(
+      (a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id)
+    ),
+    questions: [...questions.values()].sort((a, b) => {
+      const externalIdComparison = (a.external_id ?? '').localeCompare(b.external_id ?? '');
+      if (externalIdComparison !== 0) {
+        return externalIdComparison;
+      }
+
+      return a.id.localeCompare(b.id);
+    }),
+    verdicts: VALID_VERDICTS.filter((verdict) => verdicts.has(verdict)),
+  };
+}
+
+function normalizeResultsEvaluation(row: unknown, queueId: string): ResultsEvaluation {
   const record = asRecord(row, 'results evaluation');
   const submission = asRecord(unwrapRelation(record.submissions, 'submission'), 'submission');
   const question = asRecord(unwrapRelation(record.question_templates, 'question'), 'question');
   const judge = asRecord(unwrapRelation(record.judges, 'judge'), 'judge');
+
+  assertQueueScope(submission, queueId, 'evaluation submission');
 
   return {
     id: asString(record.id, 'evaluation.id'),
@@ -203,9 +323,12 @@ function normalizeResultsEvaluation(row: unknown): ResultsEvaluation {
   };
 }
 
-function normalizeAggregateRow(row: unknown): AggregateRow {
+function normalizeAggregateRow(row: unknown, queueId: string): AggregateRow {
   const record = asRecord(row, 'results aggregate row');
   const judge = asRecord(unwrapRelation(record.judges, 'judge'), 'judge');
+  const submission = asRecord(unwrapRelation(record.submissions, 'aggregate submission'), 'aggregate submission');
+
+  assertQueueScope(submission, queueId, 'aggregate submission');
 
   return {
     judgeId: asString(record.judge_id, 'aggregate.judge_id'),
@@ -216,6 +339,42 @@ function normalizeAggregateRow(row: unknown): AggregateRow {
       name: asString(judge.name, 'judge.name'),
     },
   };
+}
+
+function normalizeFilterMetadataRow(row: unknown, queueId: string): FilterMetadataRow {
+  const record = asRecord(row, 'results filter metadata row');
+  const submission = asRecord(unwrapRelation(record.submissions, 'filter metadata submission'), 'filter metadata submission');
+  const question = asRecord(unwrapRelation(record.question_templates, 'filter metadata question'), 'filter metadata question');
+  const judge = asRecord(unwrapRelation(record.judges, 'filter metadata judge'), 'filter metadata judge');
+
+  assertQueueScope(submission, queueId, 'filter metadata submission');
+
+  return {
+    verdict: asNullableVerdict(record.verdict, 'filter metadata verdict'),
+    judge: {
+      id: asString(judge.id, 'filter metadata judge.id'),
+      name: asString(judge.name, 'filter metadata judge.name'),
+      model: asString(judge.model, 'filter metadata judge.model'),
+    },
+    question: {
+      id: asString(question.id, 'filter metadata question.id'),
+      external_id: asNullableString(question.external_id, 'filter metadata question.external_id'),
+      question_text: asString(question.question_text, 'filter metadata question.question_text'),
+    },
+  };
+}
+
+function assertQueueScope(value: Record<string, unknown>, queueId: string, label: string) {
+  const relationQueueId = asString(value.queue_id, `${label}.queue_id`);
+
+  if (relationQueueId !== queueId) {
+    throw new ResultsResponseError(
+      `Expected ${label}.queue_id to equal ${queueId}, received ${relationQueueId}.`,
+      {
+        publicMessage: 'Malformed queue-scoped results returned from storage.',
+      }
+    );
+  }
 }
 
 function unwrapRelation(value: unknown, label: string): unknown {

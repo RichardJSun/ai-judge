@@ -71,6 +71,24 @@ export interface JudgePassRate {
     total: number;
 }
 
+export interface ResultsFilterJudge {
+    id: Judge['id'];
+    name: Judge['name'];
+    model: Judge['model'];
+}
+
+export interface ResultsFilterQuestion {
+    id: QuestionTemplate['id'];
+    external_id: QuestionTemplate['external_id'] | null;
+    question_text: QuestionTemplate['question_text'];
+}
+
+export interface ResultsFilterMetadata {
+    judges: ResultsFilterJudge[];
+    questions: ResultsFilterQuestion[];
+    verdicts: VerdictEnum[];
+}
+
 export interface ResultsResponse {
     evaluations: ResultsEvaluation[];
     total: number;
@@ -78,6 +96,7 @@ export interface ResultsResponse {
     judgePassRates: JudgePassRate[];
     page: number;
     pageSize: number;
+    filterMetadata: ResultsFilterMetadata;
 }
 
 export interface RunPreviewResponse {
