@@ -80,20 +80,46 @@ export interface SubmissionDetailBackNavigationRouter {
   push: (href: string) => void;
 }
 
+export function shouldUseSubmissionDetailHistoryBack({
+  source,
+  historyLength,
+  historyEntryUrl,
+  currentUrl,
+}: {
+  source: SubmissionDetailNavigationSource;
+  historyLength: number;
+  historyEntryUrl?: string | null;
+  currentUrl?: string | null;
+}) {
+  if (source !== 'results' || historyLength <= 1) {
+    return false;
+  }
+
+  if (!historyEntryUrl || !currentUrl) {
+    return true;
+  }
+
+  return historyEntryUrl !== currentUrl;
+}
+
 export function handleSubmissionDetailBack({
   queueId,
   source,
   resultsHref,
   router,
   historyLength,
+  historyEntryUrl,
+  currentUrl,
 }: {
   queueId: string;
   source: SubmissionDetailNavigationSource;
   resultsHref?: string | null;
   router: SubmissionDetailBackNavigationRouter;
   historyLength: number;
+  historyEntryUrl?: string | null;
+  currentUrl?: string | null;
 }) {
-  if (source === 'results' && historyLength > 1) {
+  if (shouldUseSubmissionDetailHistoryBack({ source, historyLength, historyEntryUrl, currentUrl })) {
     router.back();
     return;
   }
@@ -177,6 +203,11 @@ export default function SubmissionDetailPage({
   const navigationContext = resolveSubmissionDetailNavigationContext(queueId, resolvedSearchParams);
   const router = useRouter();
   const queryKey = getSubmissionDetailQueryKey(queueId, submissionId);
+  const historyEntryUrl =
+    typeof window === 'undefined'
+      ? null
+      : (performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined)?.name ?? null;
+  const currentUrl = typeof window === 'undefined' ? null : window.location.href;
 
   const query = useQuery<SubmissionDetailResponse, Error>({
     queryKey,
@@ -200,6 +231,8 @@ export default function SubmissionDetailPage({
           resultsHref: navigationContext.resultsHref,
           router,
           historyLength: typeof window === 'undefined' ? 0 : window.history.length,
+          historyEntryUrl,
+          currentUrl,
         })
       }
     />

@@ -9,6 +9,7 @@ import {
   handleSubmissionDetailBack,
   parseSubmissionDetailNavigationSource,
   resolveSubmissionDetailNavigationContext,
+  shouldUseSubmissionDetailHistoryBack,
   SubmissionDetailPageContent,
 } from './page';
 
@@ -220,11 +221,21 @@ describe('submission detail page helpers', () => {
     expect(router.push).toHaveBeenCalledWith('/queues/queue-1');
   });
 
-  it('prefers browser history for results-origin visits when history is available', () => {
+  it('prefers browser history for in-app results-origin visits when the initial navigation entry differs from the current detail URL', () => {
     const router = {
       back: mock(() => undefined),
       push: mock((_href: string) => undefined),
     };
+
+    expect(
+      shouldUseSubmissionDetailHistoryBack({
+        source: 'results',
+        historyLength: 2,
+        historyEntryUrl: 'http://localhost:3000/queues/queue-1/results?page=3&judgeId=judge-1',
+        currentUrl:
+          'http://localhost:3000/queues/queue-1/submissions/submission-1?source=results&page=3&judgeId=judge-1',
+      })
+    ).toBe(true);
 
     handleSubmissionDetailBack({
       queueId: 'queue-1',
@@ -232,10 +243,48 @@ describe('submission detail page helpers', () => {
       resultsHref: '/queues/queue-1/results?page=3&judgeId=judge-1',
       router,
       historyLength: 2,
+      historyEntryUrl: 'http://localhost:3000/queues/queue-1/results?page=3&judgeId=judge-1',
+      currentUrl:
+        'http://localhost:3000/queues/queue-1/submissions/submission-1?source=results&page=3&judgeId=judge-1',
     });
 
     expect(router.back).toHaveBeenCalledTimes(1);
     expect(router.push).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the contextual results URL for fresh direct-loaded results-origin detail pages even when history.length is 2', () => {
+    const router = {
+      back: mock(() => undefined),
+      push: mock((_href: string) => undefined),
+    };
+
+    expect(
+      shouldUseSubmissionDetailHistoryBack({
+        source: 'results',
+        historyLength: 2,
+        historyEntryUrl:
+          'http://localhost:3000/queues/queue-1/submissions/submission-1?source=results&page=3&judgeId=judge-1',
+        currentUrl:
+          'http://localhost:3000/queues/queue-1/submissions/submission-1?source=results&page=3&judgeId=judge-1',
+      })
+    ).toBe(false);
+
+    handleSubmissionDetailBack({
+      queueId: 'queue-1',
+      source: 'results',
+      resultsHref: '/queues/queue-1/results?page=3&judgeId=judge-1&questionId=question-1&verdict=pass',
+      router,
+      historyLength: 2,
+      historyEntryUrl:
+        'http://localhost:3000/queues/queue-1/submissions/submission-1?source=results&page=3&judgeId=judge-1',
+      currentUrl:
+        'http://localhost:3000/queues/queue-1/submissions/submission-1?source=results&page=3&judgeId=judge-1',
+    });
+
+    expect(router.back).not.toHaveBeenCalled();
+    expect(router.push).toHaveBeenCalledWith(
+      '/queues/queue-1/results?page=3&judgeId=judge-1&questionId=question-1&verdict=pass'
+    );
   });
 
   it('falls back to the sanitized contextual results URL when a results-origin visit has no history', () => {
