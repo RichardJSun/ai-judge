@@ -16,12 +16,14 @@ const QueueScopedRowSchema = z.object({
   queue_id: z.string().min(1),
 });
 
-const QueueResultsRowSchema = z.object({
-  submissions: z.unknown(),
+const QueueRunRowSchema = z.object({
+  queue_id: z.string().min(1),
+  total: z.number().int().nonnegative(),
 });
 
 type QueueRow = z.infer<typeof QueueRowSchema>;
 type QueueScopedRow = z.infer<typeof QueueScopedRowSchema>;
+type QueueRunRow = z.infer<typeof QueueRunRowSchema>;
 
 type QueuesRouteDeps = {
   createServiceClient: typeof createServiceClient;
@@ -43,18 +45,6 @@ async function fetchQueueTotal(supabase: ReturnType<typeof createServiceClient>)
   }
 
   return count;
-}
-
-function unwrapSingleRelation(value: unknown, context: string) {
-  if (Array.isArray(value)) {
-    if (value.length !== 1) {
-      throw new Error(`Malformed ${context}: expected exactly one related row, received ${value.length}.`);
-    }
-
-    return value[0];
-  }
-
-  return value;
 }
 
 function parseQueueRows(value: unknown, context: string): QueueRow[] {
@@ -81,26 +71,19 @@ function parseScopedQueueRows(value: unknown, allowedQueueIds: Set<string>, cont
   return parsed.data;
 }
 
-function parseResultsRows(value: unknown, allowedQueueIds: Set<string>, context: string): QueueScopedRow[] {
-  const parsed = z.array(QueueResultsRowSchema).safeParse(value);
+function parseQueueRunRows(value: unknown, allowedQueueIds: Set<string>, context: string): QueueRunRow[] {
+  const parsed = z.array(QueueRunRowSchema).safeParse(value);
   if (!parsed.success) {
     throw new Error(`Malformed ${context}: ${parsed.error.message}`);
   }
 
-  return parsed.data.map((row, index) => {
-    const relation = unwrapSingleRelation(row.submissions, `${context} submissions relation at index ${index}`);
-    const relationParsed = QueueScopedRowSchema.safeParse(relation);
-
-    if (!relationParsed.success) {
-      throw new Error(`Malformed ${context}: ${relationParsed.error.message}`);
+  for (const row of parsed.data) {
+    if (!allowedQueueIds.has(row.queue_id)) {
+      throw new Error(`Malformed ${context}: queue_id ${row.queue_id} was not part of the visible page.`);
     }
+  }
 
-    if (!allowedQueueIds.has(relationParsed.data.queue_id)) {
-      throw new Error(`Malformed ${context}: queue_id ${relationParsed.data.queue_id} was not part of the visible page.`);
-    }
-
-    return relationParsed.data;
-  });
+  return parsed.data;
 }
 
 function countRowsByQueueId(rows: QueueScopedRow[]) {
@@ -111,6 +94,16 @@ function countRowsByQueueId(rows: QueueScopedRow[]) {
   }
 
   return counts;
+}
+
+function sumRunTotalsByQueueId(rows: QueueRunRow[]) {
+  const totals = new Map<string, number>();
+
+  for (const row of rows) {
+    totals.set(row.queue_id, (totals.get(row.queue_id) ?? 0) + row.total);
+  }
+
+  return totals;
 }
 
 async function fetchQueueCounts(
@@ -162,13 +155,13 @@ async function fetchPagedQueueRows(
 
   const queueIds = queueRows.map((queue) => queue.id);
   const visibleQueueIds = new Set(queueIds);
-  const [submissionCounts, questionCounts, resultCounts] = await Promise.all([
+  const [submissionCounts, questionCounts, runTotals] = await Promise.all([
     supabase.from('submissions').select('queue_id').in('queue_id', queueIds),
     supabase.from('question_templates').select('queue_id').in('queue_id', queueIds),
-    supabase.from('evaluations').select('submissions!inner(queue_id)').in('submissions.queue_id', queueIds),
+    supabase.from('evaluation_runs').select('queue_id, total').in('queue_id', queueIds),
   ]);
 
-  if (submissionCounts.error || questionCounts.error || resultCounts.error) {
+  if (submissionCounts.error || questionCounts.error || runTotals.error) {
     throw new Error('Failed to load derived queue metadata.');
   }
 
@@ -182,15 +175,11 @@ async function fetchPagedQueueRows(
     visibleQueueIds,
     '/api/queues question counts response'
   );
-  const resultRows = parseResultsRows(
-    resultCounts.data ?? [],
-    visibleQueueIds,
-    '/api/queues results metadata response'
-  );
+  const runRows = parseQueueRunRows(runTotals.data ?? [], visibleQueueIds, '/api/queues run totals response');
 
   const submissionCountByQueueId = countRowsByQueueId(submissionRows);
   const questionCountByQueueId = countRowsByQueueId(questionRows);
-  const resultCountByQueueId = countRowsByQueueId(resultRows);
+  const resultCountByQueueId = sumRunTotalsByQueueId(runRows);
 
   return queueRows.map((queue) => ({
     ...queue,

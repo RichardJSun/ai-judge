@@ -19,7 +19,7 @@ class FakeQuery<T> implements PromiseLike<QueryResult<T>> {
   constructor(
     private readonly executor: QueryExecutor<T>,
     readonly table: string
-  ) {}
+  ) { }
 
   select(...args: unknown[]) {
     this.selectArgs.push(args);
@@ -53,7 +53,7 @@ class FakeQuery<T> implements PromiseLike<QueryResult<T>> {
 class FakeSupabaseClient {
   readonly queries: FakeQuery<unknown>[] = [];
 
-  constructor(private readonly executors: Record<string, QueryExecutor<unknown> | QueryExecutor<unknown>[]>) {}
+  constructor(private readonly executors: Record<string, QueryExecutor<unknown> | QueryExecutor<unknown>[]>) { }
 
   from(table: string) {
     const executorEntry = this.executors[table];
@@ -100,10 +100,10 @@ function createQueueRow(id: number) {
   };
 }
 
-function createResultsRow(queueId: string, asArray = false) {
-  const relation = { queue_id: queueId };
+function createRunRow(queueId: string, total: number) {
   return {
-    submissions: asArray ? [relation] : relation,
+    queue_id: queueId,
+    total,
   };
 }
 
@@ -156,16 +156,12 @@ describe('handleGetQueues', () => {
         });
         return json([{ queue_id: 'queue-25' }]);
       },
-      evaluations: (query) => {
+      evaluation_runs: (query) => {
         expect(query.inArgs[0]).toEqual({
-          column: 'submissions.queue_id',
+          column: 'queue_id',
           values: visibleRows.map((row) => row.id),
         });
-        return json([
-          createResultsRow('queue-1'),
-          createResultsRow('queue-25'),
-          createResultsRow('queue-25', true),
-        ]);
+        return json([createRunRow('queue-1', 1), createRunRow('queue-25', 2)]);
       },
     });
 
@@ -218,12 +214,12 @@ describe('handleGetQueues', () => {
         });
         return json([{ queue_id: 'queue-27' }]);
       },
-      evaluations: (query) => {
+      evaluation_runs: (query) => {
         expect(query.inArgs[0]).toEqual({
-          column: 'submissions.queue_id',
+          column: 'queue_id',
           values: ['queue-26', 'queue-27'],
         });
-        return json([createResultsRow('queue-26'), createResultsRow('queue-26')]);
+        return json([createRunRow('queue-26', 2)]);
       },
     });
 
@@ -268,7 +264,7 @@ describe('handleGetQueues', () => {
       ],
       submissions: () => json([{ queue_id: 'queue-26' }]),
       question_templates: () => json([{ queue_id: 'queue-27' }]),
-      evaluations: () => json([createResultsRow('queue-27')]),
+      evaluation_runs: () => json([createRunRow('queue-27', 1)]),
     });
 
     const response = await handleGetQueues(createRequest('http://localhost/api/queues?page=3'), {
@@ -319,7 +315,7 @@ describe('handleGetQueues', () => {
       queues: () => json([createQueueRow(1)], 1),
       submissions: () => json([{ queue_id: 'queue-1' }]),
       question_templates: () => json([]),
-      evaluations: () => failure('evaluations unavailable'),
+      evaluation_runs: () => failure('run totals unavailable'),
     });
 
     const derivedResultsFailureResponse = await handleGetQueues(createRequest('http://localhost/api/queues?page=1'), {
@@ -329,19 +325,19 @@ describe('handleGetQueues', () => {
     expect(derivedResultsFailureResponse.status).toBe(500);
     expect(await derivedResultsFailureResponse.json()).toEqual({ error: 'Failed to load queues.' });
 
-    const malformedResultsMetadataClient = new FakeSupabaseClient({
+    const malformedRunTotalsClient = new FakeSupabaseClient({
       queues: () => json([createQueueRow(1)], 1),
       submissions: () => json([{ queue_id: 'queue-1' }]),
       question_templates: () => json([]),
-      evaluations: () => json([createResultsRow('queue-2')]),
+      evaluation_runs: () => json([createRunRow('queue-2', 1)]),
     });
 
-    const malformedResultsMetadataResponse = await handleGetQueues(createRequest('http://localhost/api/queues?page=1'), {
-      createServiceClient: () => malformedResultsMetadataClient as never,
+    const malformedRunTotalsResponse = await handleGetQueues(createRequest('http://localhost/api/queues?page=1'), {
+      createServiceClient: () => malformedRunTotalsClient as never,
     });
 
-    expect(malformedResultsMetadataResponse.status).toBe(500);
-    expect(await malformedResultsMetadataResponse.json()).toEqual({ error: 'Failed to load queues.' });
+    expect(malformedRunTotalsResponse.status).toBe(500);
+    expect(await malformedRunTotalsResponse.json()).toEqual({ error: 'Failed to load queues.' });
 
     const malformedCountClient = new FakeSupabaseClient({
       queues: () => json([createQueueRow(1)], null),
