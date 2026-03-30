@@ -82,6 +82,7 @@ function createSummary(overrides: Partial<LiveVerificationSummary> = {}): LiveVe
         currentCompleted: 6,
         currentErrored: 3,
         verdictFilter: 'pass',
+        evaluations: [],
       },
       inspectionUrls: {
         queues: 'http://localhost:3000/queues',
@@ -92,6 +93,7 @@ function createSummary(overrides: Partial<LiveVerificationSummary> = {}): LiveVe
         assign: 'http://localhost:3000/queues/queue-uuid-1/assign',
         run: 'http://localhost:3000/queues/queue-uuid-1/run',
         results: 'http://localhost:3000/queues/queue-uuid-1/results',
+        submissionDetail: 'http://localhost:3000/queues/queue-uuid-1/submissions/submission-uuid-1?source=results',
       },
       apiUrls: {
         runPreview: 'http://localhost:3000/api/queues/queue-uuid-1/run-preview',
@@ -99,7 +101,17 @@ function createSummary(overrides: Partial<LiveVerificationSummary> = {}): LiveVe
         runProgress: 'http://localhost:3000/api/queues/queue-uuid-1/runs/run-uuid-1',
         results:
           'http://localhost:3000/api/queues/queue-uuid-1/results?page=1&judgeId=judge-valid-uuid-1&judgeId=judge-invalid-uuid-1',
+        submissionDetail: 'http://localhost:3000/api/queues/queue-uuid-1/submissions/submission-uuid-1',
       },
+      attachmentProof: {
+        submissionId: 'submission-uuid-1',
+        submissionExternalId: 'submission-ext-1',
+        detailUrl: 'http://localhost:3000/queues/queue-uuid-1/submissions/submission-uuid-1?source=results',
+        detailApiUrl: 'http://localhost:3000/api/queues/queue-uuid-1/submissions/submission-uuid-1',
+        attachments: [],
+      },
+      assignmentForwarding: [],
+      scenarioProof: [],
     },
     ...overrides,
   };

@@ -18,6 +18,7 @@ const ResultsResponseSchema = z.object({
       id: z.string().min(1),
       verdict: VerdictSchema.nullable(),
       reasoning: z.string().nullable(),
+      prompt_snapshot: z.string().nullable(),
       model_used: z.string().nullable(),
       tokens_used: z.number().int().nonnegative().nullable(),
       latency_ms: z.number().nonnegative().nullable(),

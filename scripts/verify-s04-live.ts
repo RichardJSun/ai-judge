@@ -98,6 +98,15 @@ type QueueRow = {
   created_at: string;
 };
 
+type PersistedQuestion = {
+  id: string;
+  queue_id: string;
+  external_id: string;
+  question_text: string;
+  question_type: QuestionTemplate['question_type'];
+  created_at: string;
+};
+
 type ScenarioName = 'text-only' | 'multimodal' | 'blocked';
 
 type ScenarioProofEntry = {
@@ -199,6 +208,7 @@ export type InspectionUrls = {
   assign: string;
   run: string;
   results: string;
+  submissionDetail: string;
 };
 
 export type ApiUrls = {

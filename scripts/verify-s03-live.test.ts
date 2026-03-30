@@ -12,6 +12,7 @@ function createEvaluation(overrides: Partial<ResultsEvaluation> = {}): ResultsEv
     id: 'evaluation-1',
     verdict: 'pass',
     reasoning: 'Grounded in the provided evidence.',
+    prompt_snapshot: null,
     model_used: 'openai/gpt-4o-mini',
     tokens_used: 101,
     latency_ms: 250,

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test';
+import type { ResultsEvaluation } from '../src/types/api';
 import { parsePlanMarker } from '../src/lib/ai/plan-marker';
 import {
   assertInspectionUrls,
@@ -68,6 +69,7 @@ function createSummary(overrides: Partial<LiveVerificationSummary> = {}): LiveVe
       currentCompleted: 6,
       currentErrored: 3,
       verdictFilter: 'pass',
+      evaluations: [],
     },
     attachmentProof: {
       submissionId: 'submission-uuid-1',

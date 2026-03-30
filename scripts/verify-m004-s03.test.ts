@@ -23,6 +23,7 @@ function createEvaluation(overrides: Partial<ResultsResponse['evaluations'][numb
     id: 'evaluation-1',
     verdict: 'pass',
     reasoning: 'Looks correct.',
+    prompt_snapshot: null,
     model_used: 'openai/gpt-4o-mini',
     tokens_used: 123,
     latency_ms: 456,
@@ -159,6 +160,7 @@ function createSummary(overrides: Partial<LiveVerificationSummary> = {}): LiveVe
         currentCompleted: 2,
         currentErrored: 1,
         verdictFilter: 'pass',
+        evaluations: [],
       },
       inspectionUrls: {
         queues: 'http://localhost:3000/queues',
@@ -169,6 +171,7 @@ function createSummary(overrides: Partial<LiveVerificationSummary> = {}): LiveVe
         assign: 'http://localhost:3000/queues/queue-uuid-1/assign',
         run: 'http://localhost:3000/queues/queue-uuid-1/run',
         results: 'http://localhost:3000/queues/queue-uuid-1/results',
+        submissionDetail: 'http://localhost:3000/queues/queue-uuid-1/submissions/submission-1?source=results',
       },
       apiUrls: {
         runPreview: 'http://localhost:3000/api/queues/queue-uuid-1/run-preview',
@@ -176,7 +179,17 @@ function createSummary(overrides: Partial<LiveVerificationSummary> = {}): LiveVe
         runProgress: 'http://localhost:3000/api/queues/queue-uuid-1/runs/run-uuid-1',
         results:
           'http://localhost:3000/api/queues/queue-uuid-1/results?page=1&judgeId=judge-valid-1&judgeId=judge-invalid-1',
+        submissionDetail: 'http://localhost:3000/api/queues/queue-uuid-1/submissions/submission-1',
       },
+      attachmentProof: {
+        submissionId: 'submission-1',
+        submissionExternalId: 'submission-external-1',
+        detailUrl: 'http://localhost:3000/queues/queue-uuid-1/submissions/submission-1?source=results',
+        detailApiUrl: 'http://localhost:3000/api/queues/queue-uuid-1/submissions/submission-1',
+        attachments: [],
+      },
+      assignmentForwarding: [],
+      scenarioProof: [],
     },
     ...overrides,
   };

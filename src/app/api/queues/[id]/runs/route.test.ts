@@ -167,8 +167,13 @@ describe('handlePostRun', () => {
         };
         return { runId: 'run-error', total: 0, tasks: [] };
       },
-      scheduleRunExecution: async (options) => {
-        await options.onScheduleError?.();
+      scheduleRunExecution: async (options: NonNullable<Parameters<typeof handlePostRun>[2]>['scheduleRunExecution'] extends (
+        arg: infer T,
+        ...rest: never[]
+      ) => unknown
+        ? T
+        : never) => {
+        await options.onScheduleError?.(new Error('Dispatch failed to schedule.'));
         throw new Error('Dispatch failed to schedule.');
       },
     } as const;
