@@ -4,6 +4,7 @@ import type { SubmissionDetailResponse } from '@/types/api';
 import {
   fetchSubmissionDetail,
   getSubmissionDetailBackHref,
+  getSubmissionDetailBackLabel,
   getSubmissionDetailQueryKey,
   handleSubmissionDetailBack,
   parseSubmissionDetailNavigationSource,
@@ -157,9 +158,12 @@ describe('submission detail page helpers', () => {
     expect(parseSubmissionDetailNavigationSource('queue')).toBe('queue');
     expect(parseSubmissionDetailNavigationSource('anything-else')).toBe('queue');
     expect(parseSubmissionDetailNavigationSource(['results'])).toBe('queue');
+    expect(parseSubmissionDetailNavigationSource(['results', 'queue'])).toBe('queue');
   });
 
-  it('keeps queue-origin and results fallback targets queue scoped', () => {
+  it('keeps queue-origin and results fallback labels and targets queue scoped', () => {
+    expect(getSubmissionDetailBackLabel('queue')).toBe('Back to queue');
+    expect(getSubmissionDetailBackLabel('results')).toBe('Back to results');
     expect(getSubmissionDetailBackHref('queue-1', 'queue')).toBe('/queues/queue-1');
     expect(getSubmissionDetailBackHref('queue-1', 'results')).toBe('/queues/queue-1/results');
   });
@@ -226,10 +230,11 @@ describe('submission detail page helpers', () => {
 });
 
 describe('SubmissionDetailPageContent', () => {
-  it('renders an explicit loading state with deterministic back navigation copy', () => {
+  it('renders queue-origin loading state with queue-scoped return copy and breadcrumbs', () => {
     const html = renderToStaticMarkup(
       <SubmissionDetailPageContent
         queueId="queue-1"
+        source="queue"
         isLoading
         error={null}
         onRetry={() => undefined}
@@ -237,15 +242,19 @@ describe('SubmissionDetailPageContent', () => {
       />
     );
 
-    expect(html).toContain('Back');
-    expect(html).toContain('Queue queue-1');
+    expect(html).toContain('Back to queue');
+    expect(html).toContain('href="/queues"');
+    expect(html).toContain('href="/queues/queue-1"');
+    expect(html).toContain('Submission detail');
     expect(html).toContain('Loading submission detail');
+    expect(html).not.toContain('href="/queues/queue-1/results"');
   });
 
-  it('renders a reviewer-visible error alert with retry affordance', () => {
+  it('renders results-origin error state with results-scoped return copy and breadcrumbs', () => {
     const html = renderToStaticMarkup(
       <SubmissionDetailPageContent
         queueId="queue-1"
+        source="results"
         isLoading={false}
         error={new Error('Submission not found for queue.')}
         onRetry={() => undefined}
@@ -253,7 +262,11 @@ describe('SubmissionDetailPageContent', () => {
       />
     );
 
-    expect(html).toContain('Back');
+    expect(html).toContain('Back to results');
+    expect(html).toContain('href="/queues"');
+    expect(html).toContain('href="/queues/queue-1"');
+    expect(html).toContain('href="/queues/queue-1/results"');
+    expect(html).toContain('Results');
     expect(html).toContain('Submission not found for queue.');
     expect(html).toContain('Retry');
   });
@@ -262,6 +275,7 @@ describe('SubmissionDetailPageContent', () => {
     const html = renderToStaticMarkup(
       <SubmissionDetailPageContent
         queueId="queue-1"
+        source="results"
         detail={{
           ...createDetailResponse(),
           attachments: [
@@ -294,6 +308,8 @@ describe('SubmissionDetailPageContent', () => {
       />
     );
 
+    expect(html).toContain('Back to results');
+    expect(html).toContain('href="/queues/queue-1/results"');
     expect(html).toContain('Submission detail');
     expect(html).toContain('Attachments');
     expect(html).toContain('review-evidence.pdf');
@@ -316,6 +332,7 @@ describe('SubmissionDetailPageContent', () => {
     const html = renderToStaticMarkup(
       <SubmissionDetailPageContent
         queueId="queue-1"
+        source="queue"
         detail={createDetailResponse()}
         isLoading={false}
         error={null}
@@ -324,6 +341,7 @@ describe('SubmissionDetailPageContent', () => {
       />
     );
 
+    expect(html).toContain('Back to queue');
     expect(html).toContain('No attachments were included with this submission.');
   });
 });

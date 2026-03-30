@@ -2,6 +2,7 @@ import { describe, expect, it } from 'bun:test';
 import { renderToStaticMarkup } from 'react-dom/server';
 import ReviewerWayfinding, {
   createQueueReviewerBreadcrumbs,
+  createSubmissionDetailBreadcrumbs,
 } from './ReviewerWayfinding';
 
 describe('ReviewerWayfinding', () => {
@@ -21,6 +22,23 @@ describe('ReviewerWayfinding', () => {
     expect(html).toContain('Queues');
     expect(html).toContain('queue-1');
     expect(html).toContain('Results');
+  });
+
+  it('creates a results-aware breadcrumb trail for submission detail', () => {
+    const html = renderToStaticMarkup(
+      <ReviewerWayfinding
+        title="Submission detail"
+        backLabel="Back to results"
+        onBack={() => undefined}
+        breadcrumbs={createSubmissionDetailBreadcrumbs('queue-1', 'results')}
+      />
+    );
+
+    expect(html).toContain('Back to results');
+    expect(html).toContain('href="/queues"');
+    expect(html).toContain('href="/queues/queue-1"');
+    expect(html).toContain('href="/queues/queue-1/results"');
+    expect(html).toContain('Submission detail');
   });
 
   it('fails fast when required labels are empty', () => {

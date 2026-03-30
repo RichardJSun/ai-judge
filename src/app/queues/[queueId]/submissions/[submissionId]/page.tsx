@@ -1,17 +1,17 @@
 'use client';
 
-import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import {
   Alert,
   Box,
   Button,
   CircularProgress,
-  Stack,
-  Typography,
 } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { use } from 'react';
+import ReviewerWayfinding, {
+  createSubmissionDetailBreadcrumbs,
+} from '@/components/navigation/ReviewerWayfinding';
 import SubmissionDetailView from '@/components/submissions/SubmissionDetailView';
 import {
   fetchJson,
@@ -49,6 +49,10 @@ export function getSubmissionDetailBackHref(
   return source === 'results' ? `/queues/${queueId}/results` : `/queues/${queueId}`;
 }
 
+export function getSubmissionDetailBackLabel(source: SubmissionDetailNavigationSource) {
+  return source === 'results' ? 'Back to results' : 'Back to queue';
+}
+
 export interface SubmissionDetailBackNavigationRouter {
   back: () => void;
   push: (href: string) => void;
@@ -75,6 +79,7 @@ export function handleSubmissionDetailBack({
 
 export interface SubmissionDetailPageContentProps {
   queueId: string;
+  source: SubmissionDetailNavigationSource;
   detail?: SubmissionDetailResponse;
   isLoading: boolean;
   error: Error | null;
@@ -84,6 +89,7 @@ export interface SubmissionDetailPageContentProps {
 
 export function SubmissionDetailPageContent({
   queueId,
+  source,
   detail,
   isLoading,
   error,
@@ -92,14 +98,12 @@ export function SubmissionDetailPageContent({
 }: SubmissionDetailPageContentProps) {
   return (
     <>
-      <Stack direction="row" alignItems="center" spacing={1} mb={3}>
-        <Button startIcon={<ArrowBackIcon />} onClick={onBack}>
-          Back
-        </Button>
-        <Typography variant="body2" color="text.secondary">
-          Queue {queueId}
-        </Typography>
-      </Stack>
+      <ReviewerWayfinding
+        title="Submission detail"
+        backLabel={getSubmissionDetailBackLabel(source)}
+        onBack={onBack}
+        breadcrumbs={createSubmissionDetailBreadcrumbs(queueId, source)}
+      />
 
       {isLoading ? (
         <Box
@@ -154,6 +158,7 @@ export default function SubmissionDetailPage({
   return (
     <SubmissionDetailPageContent
       queueId={queueId}
+      source={navigationSource}
       detail={query.data}
       isLoading={query.isLoading && !query.data}
       error={query.error}

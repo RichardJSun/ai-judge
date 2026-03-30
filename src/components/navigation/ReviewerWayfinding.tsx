@@ -43,6 +43,28 @@ export function createQueueReviewerBreadcrumbs(
   ];
 }
 
+export function createSubmissionDetailBreadcrumbs(
+  queueId: string,
+  source: 'queue' | 'results',
+  currentLabel = 'Submission detail'
+): ReviewerWayfindingBreadcrumb[] {
+  assertNonEmpty(queueId, 'queueId');
+  assertNonEmpty(currentLabel, 'currentLabel');
+
+  const breadcrumbs: ReviewerWayfindingBreadcrumb[] = [
+    { label: 'Queues', href: '/queues' },
+    { label: queueId, href: `/queues/${queueId}` },
+  ];
+
+  if (source === 'results') {
+    breadcrumbs.push({ label: 'Results', href: `/queues/${queueId}/results` });
+  }
+
+  breadcrumbs.push({ label: currentLabel, current: true });
+
+  return breadcrumbs;
+}
+
 export default function ReviewerWayfinding({
   title,
   backLabel,
