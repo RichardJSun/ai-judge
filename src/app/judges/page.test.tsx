@@ -1,13 +1,21 @@
-import { describe, expect, it } from 'bun:test';
+import { afterEach, describe, expect, it, mock } from 'bun:test';
 import { renderToStaticMarkup } from 'react-dom/server';
 import {
     buildJudgePageHref,
+    getJudgePageQueryKey,
+    handleJudgeCreateSuccess,
     JudgesPageContent,
     normalizeJudgePageSearchParam,
     parseJudgePageResponse,
     resolveJudgePageSyncHref,
 } from './page';
 import type { JudgePageResponse } from '@/types/api';
+
+const originalFetch = globalThis.fetch;
+
+afterEach(() => {
+    globalThis.fetch = originalFetch;
+});
 
 function createJudgePageResponse(overrides: Partial<JudgePageResponse> = {}): JudgePageResponse {
     return {
@@ -55,6 +63,31 @@ describe('buildJudgePageHref', () => {
         expect(buildJudgePageHref('/judges', { filter: 'active', page: '999', scope: ['reviewer', 'history'] }, 2)).toBe(
             '/judges?filter=active&scope=reviewer&scope=history&page=2'
         );
+    });
+});
+
+describe('getJudgePageQueryKey', () => {
+    it('keeps the paged judges screen on its dedicated page-local cache root', () => {
+        expect(getJudgePageQueryKey(2)).toEqual(['judges-page', 2]);
+        expect(getJudgePageQueryKey(2)).not.toEqual(['judges']);
+    });
+});
+
+describe('handleJudgeCreateSuccess', () => {
+    it('closes the dialog and invalidates only the active paged query after a successful create', async () => {
+        const closeDialogAction = mock(() => undefined);
+        const invalidateQueries = mock(async () => undefined);
+
+        await handleJudgeCreateSuccess({
+            queryClient: { invalidateQueries },
+            page: 2,
+            closeDialogAction,
+        });
+
+        expect(closeDialogAction).toHaveBeenCalledTimes(1);
+        expect(invalidateQueries).toHaveBeenCalledTimes(1);
+        expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['judges-page', 2] });
+        expect(invalidateQueries).not.toHaveBeenCalledWith({ queryKey: ['judges'] });
     });
 });
 

@@ -19,7 +19,7 @@ import {
     TableRow,
     Typography,
 } from '@mui/material';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
@@ -120,6 +120,23 @@ export function resolveJudgePageSyncHref(pathname: string, searchParams: JudgeSe
     }
 
     return buildJudgePageHref(pathname, searchParams, page);
+}
+
+export function getJudgePageQueryKey(page: number) {
+    return ['judges-page', page] as const;
+}
+
+export async function handleJudgeCreateSuccess({
+    queryClient,
+    page,
+    closeDialogAction,
+}: {
+    queryClient: Pick<QueryClient, 'invalidateQueries'>;
+    page: number;
+    closeDialogAction: () => void;
+}) {
+    closeDialogAction();
+    await queryClient.invalidateQueries({ queryKey: getJudgePageQueryKey(page) });
 }
 
 async function fetchJudgesPage(page: number) {
@@ -275,7 +292,7 @@ export default function JudgesPageClient({ searchParams }: { searchParams: Judge
     const requestedPage = normalizeJudgePageSearchParam(searchParams.page);
 
     const { data, isLoading, isError, error, refetch } = useQuery<JudgePageResponse, Error>({
-        queryKey: ['judges-page', requestedPage],
+        queryKey: getJudgePageQueryKey(requestedPage),
         queryFn: () => fetchJudgesPage(requestedPage),
         retry: false,
     });
@@ -285,7 +302,7 @@ export default function JudgesPageClient({ searchParams }: { searchParams: Judge
             return;
         }
 
-        queryClient.setQueryData<JudgePageResponse>(['judges-page', data.page], data);
+        queryClient.setQueryData<JudgePageResponse>(getJudgePageQueryKey(data.page), data);
     }, [data, queryClient, requestedPage]);
 
     useEffect(() => {
@@ -304,8 +321,11 @@ export default function JudgesPageClient({ searchParams }: { searchParams: Judge
     const createMutation = useMutation({
         mutationFn: createJudge,
         onSuccess: async () => {
-            setOpen(false);
-            await queryClient.invalidateQueries({ queryKey: ['judges-page', getActivePage] });
+            await handleJudgeCreateSuccess({
+                queryClient,
+                page: getActivePage,
+                closeDialogAction: () => setOpen(false),
+            });
         },
     });
 
