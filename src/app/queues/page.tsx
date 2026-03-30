@@ -1,5 +1,6 @@
 export {
     buildQueuePageHref,
+    formatQueueCreatedAt,
     normalizeQueuePageSearchParam,
     parseQueuePageResponse,
     QueuesPageContent,

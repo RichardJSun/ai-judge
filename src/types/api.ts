@@ -25,8 +25,12 @@ export interface QueueWithCounts extends Queue {
     question_count: number;
 }
 
+export interface QueuePageQueue extends QueueWithCounts {
+    result_count: number;
+}
+
 export interface QueuePageResponse {
-    queues: QueueWithCounts[];
+    queues: QueuePageQueue[];
     total: number;
     page: number;
     pageSize: number;

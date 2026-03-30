@@ -2,6 +2,7 @@ export {
     buildJudgeDialogTitle,
     buildJudgePageHref,
     buildJudgeSaveSuccessMessage,
+    formatJudgeUpdatedAt,
     handleJudgeCreateSuccess,
     JudgesPageContent,
     normalizeJudgePageSearchParam,

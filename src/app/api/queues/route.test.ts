@@ -100,6 +100,13 @@ function createQueueRow(id: number) {
   };
 }
 
+function createResultsRow(queueId: string, asArray = false) {
+  const relation = { queue_id: queueId };
+  return {
+    submissions: asArray ? [relation] : relation,
+  };
+}
+
 function getQueries(client: FakeSupabaseClient, table: string) {
   return client.queries.filter((query) => query.table === table);
 }
@@ -131,7 +138,7 @@ describe('handleGetQueues', () => {
     ]);
   });
 
-  it('returns a paged response, normalizes malformed page input, and scopes counts to visible ids', async () => {
+  it('returns a paged response, normalizes malformed page input, and scopes derived metadata to visible ids', async () => {
     const visibleRows = Array.from({ length: 25 }, (_, index) => createQueueRow(index + 1));
     const client = new FakeSupabaseClient({
       queues: () => json(visibleRows, 30),
@@ -148,6 +155,17 @@ describe('handleGetQueues', () => {
           values: visibleRows.map((row) => row.id),
         });
         return json([{ queue_id: 'queue-25' }]);
+      },
+      evaluations: (query) => {
+        expect(query.inArgs[0]).toEqual({
+          column: 'submissions.queue_id',
+          values: visibleRows.map((row) => row.id),
+        });
+        return json([
+          createResultsRow('queue-1'),
+          createResultsRow('queue-25'),
+          createResultsRow('queue-25', true),
+        ]);
       },
     });
 
@@ -167,17 +185,19 @@ describe('handleGetQueues', () => {
       id: 'queue-1',
       submission_count: 1,
       question_count: 0,
+      result_count: 1,
     });
     expect(payload.queues[24]).toMatchObject({
       id: 'queue-25',
       submission_count: 1,
       question_count: 1,
+      result_count: 2,
     });
 
     expect(getQueries(client, 'queues')[0]?.rangeArgs).toEqual([{ from: 0, to: 24 }]);
   });
 
-  it('clamps out-of-range pages to the last available page and recomputes counts only for that page', async () => {
+  it('clamps out-of-range pages to the last available page and recomputes metadata only for that page', async () => {
     const lastPageRows = [createQueueRow(26), createQueueRow(27)];
     const client = new FakeSupabaseClient({
       queues: [
@@ -198,6 +218,13 @@ describe('handleGetQueues', () => {
         });
         return json([{ queue_id: 'queue-27' }]);
       },
+      evaluations: (query) => {
+        expect(query.inArgs[0]).toEqual({
+          column: 'submissions.queue_id',
+          values: ['queue-26', 'queue-27'],
+        });
+        return json([createResultsRow('queue-26'), createResultsRow('queue-26')]);
+      },
     });
 
     const response = await handleGetQueues(createRequest('http://localhost/api/queues?page=9'), {
@@ -211,11 +238,13 @@ describe('handleGetQueues', () => {
           ...createQueueRow(26),
           submission_count: 2,
           question_count: 0,
+          result_count: 2,
         },
         {
           ...createQueueRow(27),
           submission_count: 0,
           question_count: 1,
+          result_count: 0,
         },
       ],
       total: 27,
@@ -239,6 +268,7 @@ describe('handleGetQueues', () => {
       ],
       submissions: () => json([{ queue_id: 'queue-26' }]),
       question_templates: () => json([{ queue_id: 'queue-27' }]),
+      evaluations: () => json([createResultsRow('queue-27')]),
     });
 
     const response = await handleGetQueues(createRequest('http://localhost/api/queues?page=3'), {
@@ -252,11 +282,13 @@ describe('handleGetQueues', () => {
           ...createQueueRow(26),
           submission_count: 1,
           question_count: 0,
+          result_count: 0,
         },
         {
           ...createQueueRow(27),
           submission_count: 0,
           question_count: 1,
+          result_count: 1,
         },
       ],
       total: 27,
@@ -282,19 +314,34 @@ describe('handleGetQueues', () => {
     expect(await response.json()).toEqual({ error: 'Failed to load queues.' });
   });
 
-  it('returns a reviewer-safe 500 when derived count lookups fail or page metadata is malformed', async () => {
-    const derivedCountFailureClient = new FakeSupabaseClient({
+  it('returns a reviewer-safe 500 when derived lookups fail or the paged results metadata is malformed', async () => {
+    const derivedResultsFailureClient = new FakeSupabaseClient({
       queues: () => json([createQueueRow(1)], 1),
-      submissions: () => failure('submissions unavailable'),
+      submissions: () => json([{ queue_id: 'queue-1' }]),
       question_templates: () => json([]),
+      evaluations: () => failure('evaluations unavailable'),
     });
 
-    const derivedCountFailureResponse = await handleGetQueues(createRequest('http://localhost/api/queues?page=1'), {
-      createServiceClient: () => derivedCountFailureClient as never,
+    const derivedResultsFailureResponse = await handleGetQueues(createRequest('http://localhost/api/queues?page=1'), {
+      createServiceClient: () => derivedResultsFailureClient as never,
     });
 
-    expect(derivedCountFailureResponse.status).toBe(500);
-    expect(await derivedCountFailureResponse.json()).toEqual({ error: 'Failed to load queues.' });
+    expect(derivedResultsFailureResponse.status).toBe(500);
+    expect(await derivedResultsFailureResponse.json()).toEqual({ error: 'Failed to load queues.' });
+
+    const malformedResultsMetadataClient = new FakeSupabaseClient({
+      queues: () => json([createQueueRow(1)], 1),
+      submissions: () => json([{ queue_id: 'queue-1' }]),
+      question_templates: () => json([]),
+      evaluations: () => json([createResultsRow('queue-2')]),
+    });
+
+    const malformedResultsMetadataResponse = await handleGetQueues(createRequest('http://localhost/api/queues?page=1'), {
+      createServiceClient: () => malformedResultsMetadataClient as never,
+    });
+
+    expect(malformedResultsMetadataResponse.status).toBe(500);
+    expect(await malformedResultsMetadataResponse.json()).toEqual({ error: 'Failed to load queues.' });
 
     const malformedCountClient = new FakeSupabaseClient({
       queues: () => json([createQueueRow(1)], null),

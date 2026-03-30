@@ -33,6 +33,15 @@ import type { Judge } from '@/types/db';
 
 const SAFE_JUDGES_ERROR = 'Failed to load judges.';
 const MISSING_MANAGED_JUDGE_ERROR = 'Select a judge from the current page before saving changes.';
+const JUDGE_UPDATED_AT_FORMATTER = new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZone: 'UTC',
+    timeZoneName: 'short',
+});
 
 const JudgePageResponseSchema = z.object({
     judges: z.array(JudgeRecordSchema),
@@ -134,6 +143,11 @@ export function buildJudgeSaveSuccessMessage(savedJudge: Pick<Judge, 'name' | 'a
     return savedJudge.active
         ? `Saved ${savedJudge.name}. This judge remains active.`
         : `Saved ${savedJudge.name}. This judge is now inactive but still persisted for history.`;
+}
+
+export function formatJudgeUpdatedAt(updatedAt: string) {
+    const value = new Date(updatedAt);
+    return Number.isNaN(value.getTime()) ? updatedAt : JUDGE_UPDATED_AT_FORMATTER.format(value);
 }
 
 export function requireManagedJudgeSelection(selectedJudge: Judge | null) {
@@ -305,7 +319,7 @@ export function JudgesPageContent({
                                                 </Typography>
                                             </Stack>
                                         </TableCell>
-                                        <TableCell>{new Date(judge.updated_at).toLocaleString()}</TableCell>
+                                        <TableCell>{formatJudgeUpdatedAt(judge.updated_at)}</TableCell>
                                         <TableCell align="right">
                                             <Button
                                                 type="button"

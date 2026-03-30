@@ -1,6 +1,7 @@
 'use client';
 
 import AssignmentIcon from '@mui/icons-material/Assignment';
+import BarChartIcon from '@mui/icons-material/BarChart';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import {
@@ -28,6 +29,12 @@ import ReviewerPagination from '@/components/pagination/ReviewerPagination';
 import type { QueuePageResponse } from '@/types/api';
 
 const SAFE_QUEUES_ERROR = 'Failed to load queues.';
+const CREATED_DATE_FORMATTER = new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    timeZone: 'UTC',
+});
 
 const QueuePageResponseSchema = z.object({
     queues: z.array(
@@ -37,6 +44,7 @@ const QueuePageResponseSchema = z.object({
             created_at: z.string().min(1),
             submission_count: z.number().int().nonnegative(),
             question_count: z.number().int().nonnegative(),
+            result_count: z.number().int().nonnegative(),
         })
     ),
     total: z.number().int().nonnegative(),
@@ -88,6 +96,11 @@ export function parseQueuePageResponse(value: unknown, context = '/api/queues pa
     }
 
     return parsed.data;
+}
+
+export function formatQueueCreatedAt(createdAt: string) {
+    const value = new Date(createdAt);
+    return Number.isNaN(value.getTime()) ? createdAt : CREATED_DATE_FORMATTER.format(value);
 }
 
 export function buildQueuePageHref(pathname: string, searchParams: QueueSearchParams, page: number) {
@@ -196,7 +209,7 @@ export function QueuesPageContent({
                                         Questions
                                     </TableCell>
                                     <TableCell sx={{ minWidth: 180, whiteSpace: 'nowrap' }}>Created</TableCell>
-                                    <TableCell align="right" sx={{ minWidth: 280, whiteSpace: 'nowrap' }}>
+                                    <TableCell align="right" sx={{ minWidth: 360, whiteSpace: 'nowrap' }}>
                                         Actions
                                     </TableCell>
                                 </TableRow>
@@ -215,7 +228,7 @@ export function QueuesPageContent({
                                         <TableCell align="center">
                                             <Chip label={queue.question_count} size="small" />
                                         </TableCell>
-                                        <TableCell sx={{ whiteSpace: 'nowrap' }}>{new Date(queue.created_at).toLocaleDateString()}</TableCell>
+                                        <TableCell sx={{ whiteSpace: 'nowrap' }}>{formatQueueCreatedAt(queue.created_at)}</TableCell>
                                         <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
                                             <Stack direction="row" spacing={1} justifyContent="flex-end">
                                                 <Button component={Link} href={`/queues/${queue.id}`} size="small" startIcon={<VisibilityIcon />}>
@@ -233,6 +246,16 @@ export function QueuesPageContent({
                                                 >
                                                     Run
                                                 </Button>
+                                                {queue.result_count > 0 ? (
+                                                    <Button
+                                                        component={Link}
+                                                        href={`/queues/${queue.id}/results`}
+                                                        size="small"
+                                                        startIcon={<BarChartIcon />}
+                                                    >
+                                                        Results
+                                                    </Button>
+                                                ) : null}
                                             </Stack>
                                         </TableCell>
                                     </TableRow>

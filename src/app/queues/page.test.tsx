@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'bun:test';
 import { renderToStaticMarkup } from 'react-dom/server';
 import {
     buildQueuePageHref,
+    formatQueueCreatedAt,
     normalizeQueuePageSearchParam,
     parseQueuePageResponse,
     QueuesPageContent,
@@ -24,6 +25,7 @@ function createQueuePageResponse(overrides: Partial<QueuePageResponse> = {}): Qu
                 created_at: '2026-03-26T10:00:00.000Z',
                 submission_count: 2,
                 question_count: 1,
+                result_count: 3,
             },
             {
                 id: 'queue-27',
@@ -31,6 +33,7 @@ function createQueuePageResponse(overrides: Partial<QueuePageResponse> = {}): Qu
                 created_at: '2026-03-27T10:00:00.000Z',
                 submission_count: 0,
                 question_count: 3,
+                result_count: 0,
             },
         ],
         total: 27,
@@ -71,10 +74,30 @@ describe('resolveQueuePageSyncHref', () => {
 });
 
 describe('parseQueuePageResponse', () => {
-    it('treats malformed page metadata and legacy array payloads as hard paged-query errors', () => {
+    it('treats malformed page metadata, missing results metadata, and legacy array payloads as hard paged-query errors', () => {
         expect(() => parseQueuePageResponse([{ id: 'queue-1' }] as never, '/api/queues?page=1 response')).toThrow(
             'Malformed /api/queues?page=1 response:'
         );
+
+        expect(() =>
+            parseQueuePageResponse(
+                {
+                    queues: [
+                        {
+                            id: 'queue-1',
+                            queue_id: 'QUEUE-001',
+                            created_at: '2026-03-01T10:00:00.000Z',
+                            submission_count: 1,
+                            question_count: 1,
+                        },
+                    ],
+                    total: 1,
+                    page: 1,
+                    pageSize: 25,
+                },
+                '/api/queues?page=1 response'
+            )
+        ).toThrow('Malformed /api/queues?page=1 response:');
 
         expect(() =>
             parseQueuePageResponse(
@@ -87,6 +110,13 @@ describe('parseQueuePageResponse', () => {
                 '/api/queues?page=1 response'
             )
         ).toThrow('Malformed /api/queues?page=1 response:');
+    });
+});
+
+describe('formatQueueCreatedAt', () => {
+    it('formats queue creation timestamps deterministically in UTC', () => {
+        expect(formatQueueCreatedAt('2026-03-26T10:00:00.000Z')).toBe('Mar 26, 2026');
+        expect(formatQueueCreatedAt('not-a-date')).toBe('not-a-date');
     });
 });
 
@@ -116,7 +146,7 @@ describe('QueuesPageContent', () => {
         expect(html).toContain('href="/upload"');
     });
 
-    it('renders only the active page rows, keeps reviewer actions intact, and exposes numbered pager links', () => {
+    it('renders only the active page rows, keeps reviewer actions intact, and exposes Results only for queues with result history', () => {
         const html = renderToStaticMarkup(
             <QueuesPageContent
                 isLoading={false}
@@ -129,9 +159,22 @@ describe('QueuesPageContent', () => {
         expect(html).toContain('QUEUE-026');
         expect(html).toContain('QUEUE-027');
         expect(html).not.toContain('QUEUE-001');
+
+        expect(html).toContain('Mar 26, 2026');
+        expect(html).toContain('Mar 27, 2026');
+
         expect(html).toContain('href="/queues/queue-26"');
         expect(html).toContain('href="/queues/queue-26/assign"');
         expect(html).toContain('href="/queues/queue-26/run"');
+        expect(html).toContain('href="/queues/queue-27"');
+        expect(html).toContain('href="/queues/queue-27/assign"');
+        expect(html).toContain('href="/queues/queue-27/run"');
+        expect(html).toContain('href="/queues/queue-26/results"');
+        expect(html).not.toContain('href="/queues/queue-27/results"');
+
+        const resultsLinkCount = html.match(/href="\/queues\/queue-\d+\/results"/g)?.length ?? 0;
+        expect(resultsLinkCount).toBe(1);
+
         expect(html).toContain('href="/queues?page=1"');
         expect(html).toContain('aria-current="page"');
     });

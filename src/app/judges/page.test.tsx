@@ -4,6 +4,7 @@ import {
     buildJudgeDialogTitle,
     buildJudgePageHref,
     buildJudgeSaveSuccessMessage,
+    formatJudgeUpdatedAt,
     getJudgePageQueryKey,
     handleJudgeCreateSuccess,
     JudgesPageContent,
@@ -154,6 +155,13 @@ describe('buildJudgeSaveSuccessMessage', () => {
         expect(buildJudgeSaveSuccessMessage({ name: 'Judge 27', active: false })).toBe(
             'Saved Judge 27. This judge is now inactive but still persisted for history.'
         );
+    });
+});
+
+describe('formatJudgeUpdatedAt', () => {
+    it('formats timestamps deterministically for server/client hydration', () => {
+        expect(formatJudgeUpdatedAt('2026-03-30T04:32:18.000Z')).toBe('Mar 30, 2026 at 4:32 AM UTC');
+        expect(formatJudgeUpdatedAt('not-a-date')).toBe('not-a-date');
     });
 });
 
