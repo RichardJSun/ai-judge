@@ -65,7 +65,7 @@ describe('summarizeReasoning', () => {
 });
 
 describe('ResultsTable', () => {
-  it('renders the shared reviewer overflow surface around reviewer-visible result fields, keeps the submission link intentional, and exposes safe audit hit areas in the non-link cells', () => {
+  it('renders the shared reviewer overflow surface around reviewer-visible result fields, keeps the submission link intentional, and exposes row-level audit toggles instead of per-cell hit areas', () => {
     const evaluation = createEvaluation();
     const html = renderToStaticMarkup(
       <ResultsTable
@@ -91,26 +91,16 @@ describe('ResultsTable', () => {
       `href="/queues/${QUEUE_ID}/submissions/${evaluation.submission.id}?source=results&amp;page=4&amp;judgeId=judge-1&amp;questionId=question-1&amp;verdict=pass"`
     );
     expect(html).toContain(`aria-label="Open submission ${evaluation.submission.external_id} from results"`);
+    expect(html).toContain('data-audit-toggle="row"');
+    expect(html).toContain(
+      `aria-label="Expand audit details for submission ${evaluation.submission.external_id} from the row"`
+    );
+    expect(html).toContain('tabindex="0"');
     expect(html).toContain('data-audit-toggle="icon"');
     expect(html).toContain(
       `aria-label="Expand audit details for submission ${evaluation.submission.external_id}"`
     );
-    expect(html).toContain(
-      `aria-label="Expand audit details for submission ${evaluation.submission.external_id} from the question cell"`
-    );
-    expect(html).toContain(
-      `aria-label="Expand audit details for submission ${evaluation.submission.external_id} from the judge cell"`
-    );
-    expect(html).toContain(
-      `aria-label="Expand audit details for submission ${evaluation.submission.external_id} from the verdict cell"`
-    );
-    expect(html).toContain(
-      `aria-label="Expand audit details for submission ${evaluation.submission.external_id} from the reasoning cell"`
-    );
-    expect(html).toContain(
-      `aria-label="Expand audit details for submission ${evaluation.submission.external_id} from the created cell"`
-    );
-    expect(html.split('data-audit-toggle="hit-area"')).toHaveLength(6);
+    expect(html).not.toContain('data-audit-toggle="hit-area"');
     expect(html).toContain('aria-controls="results-audit-details-evaluation-1"');
     expect(html).toContain('aria-expanded="false"');
     expect(html).toContain(evaluation.question.external_id);
@@ -164,7 +154,7 @@ describe('ResultsTable', () => {
     );
     expect(html).toContain(`aria-label="Open submission ${longExternalId} from results"`);
     expect(html).toContain(
-      `aria-label="Expand audit details for submission ${longExternalId} from the reasoning cell"`
+      `aria-label="Expand audit details for submission ${longExternalId} from the row"`
     );
     expect(html).toContain('Judge Atlas');
     expect(html).toContain('Error');
@@ -224,8 +214,9 @@ describe('ResultsTable', () => {
       '?source=results&amp;page=4&amp;judgeId=judge-1&amp;questionId=question-1&amp;verdict=pass"';
 
     expect(html.split(href)).toHaveLength(3);
+    expect(html.split('data-audit-toggle="row"')).toHaveLength(3);
     expect(html.split('data-audit-toggle="icon"')).toHaveLength(3);
-    expect(html.split('data-audit-toggle="hit-area"')).toHaveLength(11);
+    expect(html).not.toContain('data-audit-toggle="hit-area"');
     expect(html).toContain('A second visible question for the same submission.');
     expect(html).not.toContain('Actions');
     expect(html).not.toContain('View');

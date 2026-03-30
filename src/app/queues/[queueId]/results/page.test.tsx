@@ -281,9 +281,10 @@ describe('ResultsPageContent', () => {
     expect(html).toContain(
       'href="/queues/queue-1/submissions/submission-1?source=results&amp;page=5&amp;judgeId=judge-1&amp;questionId=question-1&amp;verdict=pass"'
     );
+    expect(html).toContain('data-audit-toggle="row"');
     expect(html).toContain('data-audit-toggle="icon"');
     expect(html).toContain(
-      'aria-label="Expand audit details for submission SUB-001 from the reasoning cell"'
+      'aria-label="Expand audit details for submission SUB-001 from the row"'
     );
     expect(html).toContain('href="/queues/queue-1/results?page=4&amp;judgeId=judge-1&amp;questionId=question-1&amp;verdict=pass"');
     expect(html).toContain('href="/queues/queue-1/results?page=6&amp;judgeId=judge-1&amp;questionId=question-1&amp;verdict=pass"');

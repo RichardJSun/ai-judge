@@ -14,11 +14,10 @@ import {
   TableCell,
   TableHead,
   TableRow,
-  Tooltip,
   Typography,
 } from '@mui/material';
 import Link from 'next/link';
-import type { ReactNode } from 'react';
+import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { useState } from 'react';
 import ReviewerTableSurface from '@/components/layout/ReviewerTableSurface';
 import { parsePlanMarker, type EvaluationPlanMarker } from '@/lib/ai/plan-marker';
@@ -43,26 +42,12 @@ const DEFAULT_RESULTS_CONTEXT: ResultsPageUrlState = {
   selectedVerdicts: [],
 };
 
-const AUDIT_HIT_AREA_BUTTON_SX = {
-  position: 'absolute',
-  inset: 0,
-  zIndex: 1,
-  width: '100%',
-  height: '100%',
-  margin: 0,
-  padding: 0,
-  border: 0,
-  borderRadius: 1,
-  background: 'transparent',
+const RESULT_ROW_SX = {
   cursor: 'pointer',
-  color: 'inherit',
-  '&:hover': {
-    backgroundColor: 'action.hover',
-  },
-  '&:focus-visible': {
+  '&:focus-visible > *': {
     outline: '2px solid',
     outlineColor: 'primary.main',
-    outlineOffset: 2,
+    outlineOffset: -2,
     backgroundColor: 'action.hover',
   },
 } as const;
@@ -121,8 +106,8 @@ function getDisclosureToggleLabel(submissionExternalId: string, open: boolean) {
   return `${open ? 'Collapse' : 'Expand'} audit details for submission ${submissionExternalId}`;
 }
 
-function getHitAreaToggleLabel(submissionExternalId: string, open: boolean, cellLabel: string) {
-  return `${open ? 'Collapse' : 'Expand'} audit details for submission ${submissionExternalId} from the ${cellLabel} cell`;
+function getRowToggleLabel(submissionExternalId: string, open: boolean) {
+  return `${open ? 'Collapse' : 'Expand'} audit details for submission ${submissionExternalId} from the row`;
 }
 
 function AuditField({
@@ -146,42 +131,6 @@ function AuditField({
   );
 }
 
-function AuditHitArea({
-  label,
-  controlsId,
-  open,
-  onToggle,
-  tooltipTitle,
-  children,
-}: {
-  label: string;
-  controlsId: string;
-  open: boolean;
-  onToggle: () => void;
-  tooltipTitle?: string;
-  children: ReactNode;
-}) {
-  const button = (
-    <Box
-      component="button"
-      type="button"
-      data-audit-toggle="hit-area"
-      aria-label={label}
-      aria-controls={controlsId}
-      aria-expanded={open}
-      onClick={onToggle}
-      sx={AUDIT_HIT_AREA_BUTTON_SX}
-    />
-  );
-
-  return (
-    <Box sx={{ position: 'relative', display: 'block', width: '100%' }}>
-      {tooltipTitle ? <Tooltip title={tooltipTitle}>{button}</Tooltip> : button}
-      <Box sx={{ position: 'relative', zIndex: 0, pointerEvents: 'none' }}>{children}</Box>
-    </Box>
-  );
-}
-
 function ExpandableRow({
   queueId,
   evaluation,
@@ -193,15 +142,32 @@ function ExpandableRow({
 }) {
   const [open, setOpen] = useState(false);
   const reasoningSummary = summarizeReasoning(evaluation.reasoning);
-  const hasFullReasoning = Boolean(evaluation.reasoning && evaluation.reasoning.trim().length > 0);
   const planMarkerState = getPlanMarkerState(evaluation.prompt_snapshot);
   const detailPanelId = `results-audit-details-${evaluation.id}`;
   const detailHref = buildSubmissionDetailResultsHref(queueId, evaluation.submission.id, resultsContext);
   const toggleRow = () => setOpen((current) => !current);
+  const handleRowKeyDown = (event: ReactKeyboardEvent<HTMLTableRowElement>) => {
+    if (event.key !== 'Enter' && event.key !== ' ') {
+      return;
+    }
+
+    event.preventDefault();
+    toggleRow();
+  };
 
   return (
     <>
-      <TableRow hover>
+      <TableRow
+        hover
+        tabIndex={0}
+        data-audit-toggle="row"
+        aria-label={getRowToggleLabel(evaluation.submission.external_id, open)}
+        aria-controls={detailPanelId}
+        aria-expanded={open}
+        onClick={toggleRow}
+        onKeyDown={handleRowKeyDown}
+        sx={RESULT_ROW_SX}
+      >
         <TableCell sx={{ verticalAlign: 'top' }}>
           <IconButton
             aria-label={getDisclosureToggleLabel(evaluation.submission.external_id, open)}
@@ -209,7 +175,10 @@ function ExpandableRow({
             aria-expanded={open}
             data-audit-toggle="icon"
             size="small"
-            onClick={toggleRow}
+            onClick={(event) => {
+              event.stopPropagation();
+              toggleRow();
+            }}
           >
             {open ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />}
           </IconButton>
@@ -219,6 +188,7 @@ function ExpandableRow({
             href={detailHref}
             prefetch={false}
             aria-label={`Open submission ${evaluation.submission.external_id} from results`}
+            onClick={(event) => event.stopPropagation()}
             style={{ color: 'inherit', display: 'inline-block', textDecoration: 'none' }}
           >
             <Typography
@@ -236,68 +206,32 @@ function ExpandableRow({
           </Link>
         </TableCell>
         <TableCell sx={{ verticalAlign: 'top', minWidth: 220 }}>
-          <AuditHitArea
-            label={getHitAreaToggleLabel(evaluation.submission.external_id, open, 'question')}
-            controlsId={detailPanelId}
-            open={open}
-            onToggle={toggleRow}
-          >
-            <Stack spacing={0.5}>
-              <Typography component="span" fontFamily="monospace" fontSize={12} color="text.secondary">
-                {evaluation.question.external_id}
-              </Typography>
-              <Typography component="span" fontSize={13}>
-                {evaluation.question.question_text}
-              </Typography>
-            </Stack>
-          </AuditHitArea>
+          <Stack spacing={0.5}>
+            <Typography component="span" fontFamily="monospace" fontSize={12} color="text.secondary">
+              {evaluation.question.external_id}
+            </Typography>
+            <Typography component="span" fontSize={13}>
+              {evaluation.question.question_text}
+            </Typography>
+          </Stack>
         </TableCell>
         <TableCell sx={{ verticalAlign: 'top', minWidth: 180 }}>
-          <AuditHitArea
-            label={getHitAreaToggleLabel(evaluation.submission.external_id, open, 'judge')}
-            controlsId={detailPanelId}
-            open={open}
-            onToggle={toggleRow}
-          >
-            <Typography component="span" fontSize={13}>
-              {evaluation.judge.name}
-            </Typography>
-          </AuditHitArea>
+          <Typography component="span" fontSize={13}>
+            {evaluation.judge.name}
+          </Typography>
         </TableCell>
         <TableCell sx={{ verticalAlign: 'top', minWidth: 120 }}>
-          <AuditHitArea
-            label={getHitAreaToggleLabel(evaluation.submission.external_id, open, 'verdict')}
-            controlsId={detailPanelId}
-            open={open}
-            onToggle={toggleRow}
-          >
-            <VerdictChip verdict={evaluation.verdict} status={evaluation.status} />
-          </AuditHitArea>
+          <VerdictChip verdict={evaluation.verdict} status={evaluation.status} />
         </TableCell>
         <TableCell sx={{ verticalAlign: 'top', minWidth: 320, maxWidth: 420 }}>
-          <AuditHitArea
-            label={getHitAreaToggleLabel(evaluation.submission.external_id, open, 'reasoning')}
-            controlsId={detailPanelId}
-            open={open}
-            onToggle={toggleRow}
-            tooltipTitle={hasFullReasoning ? evaluation.reasoning ?? '' : 'No reasoning returned.'}
-          >
-            <Typography component="span" fontSize={13} color={evaluation.reasoning ? 'text.primary' : 'text.secondary'}>
-              {reasoningSummary}
-            </Typography>
-          </AuditHitArea>
+          <Typography component="span" fontSize={13} color={evaluation.reasoning ? 'text.primary' : 'text.secondary'}>
+            {reasoningSummary}
+          </Typography>
         </TableCell>
         <TableCell sx={{ verticalAlign: 'top', minWidth: 180 }}>
-          <AuditHitArea
-            label={getHitAreaToggleLabel(evaluation.submission.external_id, open, 'created')}
-            controlsId={detailPanelId}
-            open={open}
-            onToggle={toggleRow}
-          >
-            <Typography component="span" fontSize={12} color="text.secondary">
-              <ReviewerTimestamp value={evaluation.created_at} />
-            </Typography>
-          </AuditHitArea>
+          <Typography component="span" fontSize={12} color="text.secondary">
+            <ReviewerTimestamp value={evaluation.created_at} />
+          </Typography>
         </TableCell>
       </TableRow>
       <TableRow>
