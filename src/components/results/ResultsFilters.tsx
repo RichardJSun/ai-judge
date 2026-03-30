@@ -10,17 +10,13 @@ import {
   Select,
   Stack,
 } from '@mui/material';
-import type { Judge, VerdictEnum } from '@/types/db';
-
-interface ResultsFilterQuestionOption {
-  id: string;
-  external_id: string | null;
-  question_text: string;
-}
+import type { ResultsFilterJudge, ResultsFilterQuestion } from '@/types/api';
+import type { VerdictEnum } from '@/types/db';
 
 interface ResultsFiltersProps {
-  judges: Judge[];
-  questions: ResultsFilterQuestionOption[];
+  judges: ResultsFilterJudge[];
+  questions: ResultsFilterQuestion[];
+  availableVerdicts: VerdictEnum[];
   selectedJudges: string[];
   selectedQuestions: string[];
   selectedVerdicts: VerdictEnum[];
@@ -29,11 +25,14 @@ interface ResultsFiltersProps {
   onVerdictsChange: (v: VerdictEnum[]) => void;
 }
 
-const VERDICTS: VerdictEnum[] = ['pass', 'fail', 'inconclusive'];
+function formatVerdictLabel(verdict: VerdictEnum) {
+  return verdict.charAt(0).toUpperCase() + verdict.slice(1);
+}
 
 export default function ResultsFilters({
   judges,
   questions,
+  availableVerdicts,
   selectedJudges,
   selectedQuestions,
   selectedVerdicts,
@@ -48,22 +47,20 @@ export default function ResultsFilters({
         <Select
           multiple
           value={selectedJudges}
-          onChange={(e) => onJudgesChange(e.target.value as string[])}
+          onChange={(event) => onJudgesChange(event.target.value as string[])}
           input={<OutlinedInput label="Judge" />}
           renderValue={(selected) => (
             <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
               {selected.map((id) => (
-                <Chip
-                  key={id}
-                  label={judges.find((j) => j.id === id)?.name ?? id}
-                  size="small"
-                />
+                <Chip key={id} label={judges.find((judge) => judge.id === id)?.name ?? id} size="small" />
               ))}
             </Box>
           )}
         >
-          {judges.map((j) => (
-            <MenuItem key={j.id} value={j.id}>{j.name}</MenuItem>
+          {judges.map((judge) => (
+            <MenuItem key={judge.id} value={judge.id}>
+              {judge.name}
+            </MenuItem>
           ))}
         </Select>
       </FormControl>
@@ -73,26 +70,22 @@ export default function ResultsFilters({
         <Select
           multiple
           value={selectedQuestions}
-          onChange={(e) => onQuestionsChange(e.target.value as string[])}
+          onChange={(event) => onQuestionsChange(event.target.value as string[])}
           input={<OutlinedInput label="Question" />}
           renderValue={(selected) => (
             <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
               {selected.map((id) => {
-                const q = questions.find((qt) => qt.id === id);
+                const question = questions.find((candidate) => candidate.id === id);
                 return (
-                  <Chip
-                    key={id}
-                    label={q?.external_id ?? id}
-                    size="small"
-                  />
+                  <Chip key={id} label={question?.external_id ?? id} size="small" />
                 );
               })}
             </Box>
           )}
         >
-          {questions.map((q) => (
-            <MenuItem key={q.id} value={q.id}>
-              {q.external_id} — {q.question_text.slice(0, 50)}
+          {questions.map((question) => (
+            <MenuItem key={question.id} value={question.id}>
+              {question.external_id ?? question.id} — {question.question_text.slice(0, 50)}
             </MenuItem>
           ))}
         </Select>
@@ -103,16 +96,20 @@ export default function ResultsFilters({
         <Select
           multiple
           value={selectedVerdicts}
-          onChange={(e) => onVerdictsChange(e.target.value as VerdictEnum[])}
+          onChange={(event) => onVerdictsChange(event.target.value as VerdictEnum[])}
           input={<OutlinedInput label="Verdict" />}
           renderValue={(selected) => (
             <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
-              {selected.map((v) => <Chip key={v} label={v} size="small" />)}
+              {selected.map((verdict) => (
+                <Chip key={verdict} label={verdict} size="small" />
+              ))}
             </Box>
           )}
         >
-          {VERDICTS.map((v) => (
-            <MenuItem key={v} value={v}>{v.charAt(0).toUpperCase() + v.slice(1)}</MenuItem>
+          {availableVerdicts.map((verdict) => (
+            <MenuItem key={verdict} value={verdict}>
+              {formatVerdictLabel(verdict)}
+            </MenuItem>
           ))}
         </Select>
       </FormControl>
