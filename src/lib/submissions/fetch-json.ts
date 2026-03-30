@@ -1,5 +1,20 @@
 import { z } from 'zod';
-import type { SubmissionDetailResponse } from '@/types/api';
+import type { QueueSubmissionsResponse, SubmissionDetailResponse } from '@/types/api';
+
+const QueueSubmissionSchema = z.object({
+  id: z.string().min(1),
+  external_id: z.string().min(1),
+  labeling_task_id: z.string().min(1).nullable(),
+  submitted_at: z.string().min(1).nullable(),
+  created_at: z.string().min(1),
+});
+
+const QueueSubmissionsResponseSchema = z.object({
+  submissions: z.array(QueueSubmissionSchema),
+  total: z.number().int().nonnegative(),
+  page: z.number().int().positive(),
+  pageSize: z.number().int().positive(),
+});
 
 const SubmissionDetailAnswerSchema = z.union([
   z.string(),
@@ -79,6 +94,25 @@ export async function fetchJson<T>(input: RequestInfo | URL, options: FetchJsonO
   }
 
   return options.parse(body);
+}
+
+export function fetchQueueSubmissions(queueId: string, page: number) {
+  return fetchJson(`/api/queues/${queueId}/submissions?page=${page}`, {
+    fallbackMessage: 'Failed to load queue submissions.',
+    parse: (value) => parseQueueSubmissionsResponse(value, `/api/queues/${queueId}/submissions?page=${page} response`),
+  });
+}
+
+export function parseQueueSubmissionsResponse(
+  value: unknown,
+  context = 'queue submissions response'
+): QueueSubmissionsResponse {
+  const parsed = QueueSubmissionsResponseSchema.safeParse(value);
+  if (!parsed.success) {
+    throw new Error(`Malformed ${context}: ${parsed.error.message}`);
+  }
+
+  return parsed.data;
 }
 
 export function parseSubmissionDetailResponse(

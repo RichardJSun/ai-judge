@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, mock } from 'bun:test';
-import { fetchJson, parseSubmissionDetailResponse } from './fetch-json';
+import { fetchJson, parseQueueSubmissionsResponse, parseSubmissionDetailResponse } from './fetch-json';
 
 const originalFetch = globalThis.fetch;
 
@@ -76,6 +76,38 @@ describe('fetchJson', () => {
     ).rejects.toThrow(/Malformed \/api\/queues\/queue-1\/submissions\/submission-1 response: /);
   });
 
+  it('rejects malformed successful queue-submissions payloads before pagination state is derived', async () => {
+    globalThis.fetch = mock(
+      async () =>
+        new Response(
+          JSON.stringify({
+            submissions: [
+              {
+                id: 'submission-1',
+                external_id: 'submission-external-1',
+                labeling_task_id: null,
+                submitted_at: '2026-03-28T10:05:00.000Z',
+                created_at: '2026-03-28T10:05:00.000Z',
+              },
+            ],
+            total: 1,
+            pageSize: 20,
+          }),
+          {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          }
+        )
+    ) as unknown as typeof fetch;
+
+    await expect(
+      fetchJson('/api/queues/queue-1/submissions?page=1', {
+        fallbackMessage: 'Failed to load queue submissions.',
+        parse: (value) => parseQueueSubmissionsResponse(value, '/api/queues/queue-1/submissions?page=1 response'),
+      })
+    ).rejects.toThrow(/Malformed \/api\/queues\/queue-1\/submissions\?page=1 response: /);
+  });
+
   it('surfaces invalid JSON responses with the fallback message context', async () => {
     globalThis.fetch = mock(
       async () =>
@@ -91,6 +123,83 @@ describe('fetchJson', () => {
         parse: (value) => value,
       })
     ).rejects.toThrow('Failed to load submission detail. The server returned invalid JSON.');
+  });
+});
+
+describe('parseQueueSubmissionsResponse', () => {
+  it('accepts the canonical queue submissions pagination payload', () => {
+    expect(
+      parseQueueSubmissionsResponse({
+        submissions: [
+          {
+            id: 'submission-1',
+            external_id: 'submission-external-1',
+            labeling_task_id: null,
+            submitted_at: '2026-03-28T10:05:00.000Z',
+            created_at: '2026-03-28T10:05:00.000Z',
+          },
+          {
+            id: 'submission-2',
+            external_id: 'submission-external-2',
+            labeling_task_id: 'task-22',
+            submitted_at: null,
+            created_at: '2026-03-28T10:06:00.000Z',
+          },
+        ],
+        total: 21,
+        page: 2,
+        pageSize: 20,
+      })
+    ).toEqual({
+      submissions: [
+        {
+          id: 'submission-1',
+          external_id: 'submission-external-1',
+          labeling_task_id: null,
+          submitted_at: '2026-03-28T10:05:00.000Z',
+          created_at: '2026-03-28T10:05:00.000Z',
+        },
+        {
+          id: 'submission-2',
+          external_id: 'submission-external-2',
+          labeling_task_id: 'task-22',
+          submitted_at: null,
+          created_at: '2026-03-28T10:06:00.000Z',
+        },
+      ],
+      total: 21,
+      page: 2,
+      pageSize: 20,
+    });
+  });
+
+  it('rejects missing top-level pagination fields', () => {
+    expect(() =>
+      parseQueueSubmissionsResponse({
+        submissions: [],
+        total: 0,
+        pageSize: 20,
+      })
+    ).toThrow(/Malformed queue submissions response: /);
+  });
+
+  it('rejects malformed submission rows', () => {
+    expect(() =>
+      parseQueueSubmissionsResponse({
+        submissions: [
+          {
+            id: 'submission-1',
+            external_id: 'submission-external-1',
+            labeling_task_id: null,
+            submitted_at: '2026-03-28T10:05:00.000Z',
+            created_at: null,
+          },
+        ],
+        total: 1,
+        page: 1,
+        pageSize: 20,
+      })
+    ).toThrow(/Malformed queue submissions response: /);
   });
 });
 

@@ -43,6 +43,15 @@ export interface JudgePageResponse {
     pageSize: number;
 }
 
+export interface QueueSubmissionListItem extends Pick<Submission, 'id' | 'external_id' | 'labeling_task_id' | 'submitted_at' | 'created_at'> {}
+
+export interface QueueSubmissionsResponse {
+    submissions: QueueSubmissionListItem[];
+    total: number;
+    page: number;
+    pageSize: number;
+}
+
 export interface QuestionWithAssignments extends QuestionTemplate {
     assignments: (JudgeAssignment & { judge: Judge })[];
 }
