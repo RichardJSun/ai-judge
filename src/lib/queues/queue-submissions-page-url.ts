@@ -31,6 +31,10 @@ function normalizeQueueSubmissionsPageParam(value: QueueSubmissionsPageParamValu
     return Number(parsed);
 }
 
+function appendQueueSubmissionsPageStateSearchParams(searchParams: URLSearchParams, state: QueueSubmissionsPageUrlState) {
+    searchParams.set('page', String(state.page));
+}
+
 function hasCanonicalSingleValue(value: QueueSubmissionsPageParamValue, expected: string) {
     return typeof value === 'string' && value === expected;
 }
@@ -51,13 +55,24 @@ export function normalizeQueueSubmissionsPageSearchParams(
 
 export function buildQueueSubmissionsQueryString(state: QueueSubmissionsPageUrlState) {
     const nextSearchParams = new URLSearchParams();
-    nextSearchParams.set('page', String(state.page));
+    appendQueueSubmissionsPageStateSearchParams(nextSearchParams, state);
     return nextSearchParams.toString();
 }
 
 export function buildQueueSubmissionsPageHref(pathname: string, state: QueueSubmissionsPageUrlState) {
     const query = buildQueueSubmissionsQueryString(state);
     return query ? `${pathname}?${query}` : pathname;
+}
+
+export function buildQueueSubmissionDetailHref(
+    queueId: string,
+    submissionId: string,
+    state: QueueSubmissionsPageUrlState
+) {
+    const searchParams = new URLSearchParams();
+    searchParams.set('source', 'queue');
+    appendQueueSubmissionsPageStateSearchParams(searchParams, state);
+    return `/queues/${queueId}/submissions/${submissionId}?${searchParams.toString()}`;
 }
 
 export function resolveQueueSubmissionsPageSyncHref(
@@ -87,4 +102,11 @@ export function buildQueueSubmissionsHref(
         getQueueSubmissionsPath(queueId),
         normalizeQueueSubmissionsPageSearchParams(searchParams)
     );
+}
+
+export function buildQueueSubmissionDetailBackHref(
+    queueId: string,
+    searchParams: QueueSubmissionsPageSearchParams
+) {
+    return buildQueueSubmissionsHref(queueId, searchParams);
 }

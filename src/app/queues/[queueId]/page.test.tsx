@@ -113,8 +113,8 @@ describe('QueuePageContent', () => {
         expect(html).toContain('>Submitted<');
         expect(html).not.toContain('>View<');
         expect(html).not.toContain('>Actions<');
-        expect(html).toContain('href="/queues/queue-1/submissions/submission-21"');
-        expect(html).toContain('href="/queues/queue-1/submissions/submission-22"');
+        expect(html).toContain('href="/queues/queue-1/submissions/submission-21?source=queue&amp;page=2"');
+        expect(html).toContain('href="/queues/queue-1/submissions/submission-22?source=queue&amp;page=2"');
         expect(html).toContain('aria-label="Open submission SUB-021"');
         expect(html).toContain('aria-label="Open submission SUBMISSION-EXTERNAL-ID-WITH-LONG-TEXT-022"');
         expect(html).toContain('href="/queues/queue-1?page=1"');
@@ -153,8 +153,23 @@ describe('QueuePageContent', () => {
         );
 
         expect(html).toContain('SUBMISSION-EXTERNAL-ID-WITH-LONG-TEXT-022');
-        expect(html).toContain('href="/queues/queue-1/submissions/submission-22"');
+        expect(html).toContain('href="/queues/queue-1/submissions/submission-22?source=queue&amp;page=2"');
         expect(html).toContain('>—<');
+    });
+
+    it('preserves explicit first-page queue context in submission detail links', () => {
+        const html = renderToStaticMarkup(
+            <QueuePageContent
+                queueId="queue-1"
+                isLoading={false}
+                data={createResponse({ page: 1, submissions: [createResponse().submissions[0]] })}
+                loadError={null}
+                page={1}
+                onRetry={() => undefined}
+            />
+        );
+
+        expect(html).toContain('href="/queues/queue-1/submissions/submission-21?source=queue&amp;page=1"');
     });
 
     it('renders the existing empty state when no submissions are available', () => {

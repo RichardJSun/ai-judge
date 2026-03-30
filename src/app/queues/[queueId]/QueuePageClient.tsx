@@ -27,6 +27,7 @@ import {
     fetchQueueSubmissions,
 } from '@/lib/submissions/fetch-json';
 import {
+    buildQueueSubmissionDetailHref,
     buildQueueSubmissionsPageHref,
     getQueueSubmissionsPath,
     normalizeQueueSubmissionsPageSearchParams,
@@ -44,6 +45,7 @@ export interface QueuePageContentProps {
     page: number;
     onRetry: () => void | Promise<unknown>;
     getPageHref?: (page: number) => string;
+    getSubmissionHref?: (submissionId: string) => string;
 }
 
 export function getQueueSubmissionsPageQueryKey(queueId: string, state: QueueSubmissionsPageUrlState) {
@@ -78,8 +80,15 @@ export function QueuePageContent({
     loadError,
     page,
     onRetry,
-    getPageHref = (nextPage) => buildQueueSubmissionsPageHref(getQueueSubmissionsPath(queueId), { page: nextPage }),
+    getPageHref,
+    getSubmissionHref,
 }: QueuePageContentProps) {
+    const resolvedPageHref =
+        getPageHref ?? ((nextPage: number) => buildQueueSubmissionsPageHref(getQueueSubmissionsPath(queueId), { page: nextPage }));
+    const resolvedSubmissionHref =
+        getSubmissionHref ??
+        ((submissionId: string) => buildQueueSubmissionDetailHref(queueId, submissionId, { page }));
+
     return (
         <>
             <Stack direction="row" alignItems="center" justifyContent="space-between" mb={3} gap={2} flexWrap="wrap">
@@ -143,7 +152,7 @@ export function QueuePageContent({
                                     <TableRow key={submission.id} hover>
                                         <TableCell>
                                             <Link
-                                                href={`/queues/${queueId}/submissions/${submission.id}`}
+                                                href={resolvedSubmissionHref(submission.id)}
                                                 prefetch={false}
                                                 aria-label={`Open submission ${submission.external_id}`}
                                                 style={{ color: 'inherit', display: 'inline-block', textDecoration: 'none' }}
@@ -172,7 +181,7 @@ export function QueuePageContent({
                             page={page}
                             pageSize={data.pageSize}
                             total={data.total}
-                            getHref={getPageHref}
+                            getHref={resolvedPageHref}
                         />
                     </Box>
                 </Stack>
@@ -234,6 +243,11 @@ export default function QueuePageClient({
         [canonicalState, pathname]
     );
 
+    const getSubmissionHref = useCallback(
+        (submissionId: string) => buildQueueSubmissionDetailHref(queueId, submissionId, canonicalState),
+        [canonicalState, queueId]
+    );
+
     return (
         <QueuePageContent
             queueId={queueId}
@@ -243,6 +257,7 @@ export default function QueuePageClient({
             page={canonicalState.page}
             onRetry={() => refetch()}
             getPageHref={getPageHref}
+            getSubmissionHref={getSubmissionHref}
         />
     );
 }
