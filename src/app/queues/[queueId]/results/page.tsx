@@ -1,6 +1,5 @@
 'use client';
 
-import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import {
   Alert,
   Box,
@@ -14,6 +13,9 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { use, useMemo, useState } from 'react';
+import ReviewerWayfinding, {
+  createQueueReviewerBreadcrumbs,
+} from '@/components/navigation/ReviewerWayfinding';
 import PassRateChart from '@/components/results/PassRateChart';
 import ResultsFilters from '@/components/results/ResultsFilters';
 import ResultsTable from '@/components/results/ResultsTable';
@@ -69,6 +71,135 @@ function getPassRateSummary(results: ResultsResponse) {
   }
 
   return `Pass rate is based on ${completedTotal} completed evaluation${completedTotal === 1 ? '' : 's'} out of ${results.total} matching the current filters.`;
+}
+
+export interface ResultsPageContentProps {
+  queueId: string;
+  judges: Judge[];
+  questions: ResultsFilterQuestion[];
+  results?: ResultsResponse;
+  isInitialLoading: boolean;
+  loadError: Error | null;
+  selectedJudges: string[];
+  selectedQuestions: string[];
+  selectedVerdicts: VerdictEnum[];
+  page: number;
+  onBack: () => void;
+  onRetry: () => void | Promise<unknown>;
+  onJudgesChange: (value: string[]) => void;
+  onQuestionsChange: (value: string[]) => void;
+  onVerdictsChange: (value: VerdictEnum[]) => void;
+  onPreviousPage: () => void;
+  onNextPage: () => void;
+}
+
+export function ResultsPageContent({
+  queueId,
+  judges,
+  questions,
+  results,
+  isInitialLoading,
+  loadError,
+  selectedJudges,
+  selectedQuestions,
+  selectedVerdicts,
+  page,
+  onBack,
+  onRetry,
+  onJudgesChange,
+  onQuestionsChange,
+  onVerdictsChange,
+  onPreviousPage,
+  onNextPage,
+}: ResultsPageContentProps) {
+  const chartData = results?.judgePassRates ?? [];
+  const completedEvaluations = results ? getCompletedEvaluationCount(results) : 0;
+
+  return (
+    <>
+      <ReviewerWayfinding
+        title="Results"
+        backLabel="Back to queue"
+        onBack={onBack}
+        breadcrumbs={createQueueReviewerBreadcrumbs(queueId, 'Results')}
+      />
+
+      <Box mb={2}>
+        <ResultsFilters
+          judges={judges}
+          questions={questions}
+          selectedJudges={selectedJudges}
+          selectedQuestions={selectedQuestions}
+          selectedVerdicts={selectedVerdicts}
+          onJudgesChange={onJudgesChange}
+          onQuestionsChange={onQuestionsChange}
+          onVerdictsChange={onVerdictsChange}
+        />
+      </Box>
+
+      {isInitialLoading ? (
+        <Box display="flex" justifyContent="center" mt={6}>
+          <CircularProgress />
+        </Box>
+      ) : loadError ? (
+        <Alert
+          severity="error"
+          action={
+            <Button color="inherit" size="small" onClick={() => void onRetry()}>
+              Retry
+            </Button>
+          }
+        >
+          {loadError.message}
+        </Alert>
+      ) : results ? (
+        <>
+          <Paper sx={{ p: 2, mb: 2 }}>
+            <Stack direction={{ xs: 'column', md: 'row' }} spacing={3} alignItems={{ md: 'stretch' }}>
+              <Box minWidth={{ xs: '100%', md: 220 }}>
+                <Typography variant="h3" fontWeight={800} color="primary.main">
+                  {results.passRate}%
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Pass rate across completed evaluations in the current filter set.
+                </Typography>
+                <Typography variant="caption" color="text.secondary" display="block" mt={1}>
+                  {getPassRateSummary(results)}
+                </Typography>
+              </Box>
+              <Divider orientation="vertical" flexItem sx={{ display: { xs: 'none', md: 'block' } }} />
+              <Box flex={1} minWidth={0}>
+                <PassRateChart
+                  data={chartData}
+                  matchingTotal={results.total}
+                  completedTotal={completedEvaluations}
+                />
+              </Box>
+            </Stack>
+          </Paper>
+
+          <ResultsTable queueId={queueId} evaluations={results.evaluations} />
+
+          {results.total > results.pageSize ? (
+            <Stack direction="row" spacing={1} justifyContent="center" mt={2}>
+              <Button disabled={page <= 1} onClick={onPreviousPage}>
+                Previous
+              </Button>
+              <Typography alignSelf="center">Page {page}</Typography>
+              <Button
+                disabled={page * results.pageSize >= results.total}
+                onClick={onNextPage}
+              >
+                Next
+              </Button>
+            </Stack>
+          ) : null}
+        </>
+      ) : (
+        <Alert severity="error">Results data did not load.</Alert>
+      )}
+    </>
+  );
 }
 
 export default function ResultsPage({ params }: { params: Promise<{ queueId: string }> }) {
@@ -128,8 +259,6 @@ export default function ResultsPage({ params }: { params: Promise<{ queueId: str
     queryFn: () => fetchResults(queueId, filterQueryString),
   });
 
-  const chartData = results?.judgePassRates ?? [];
-  const completedEvaluations = results ? getCompletedEvaluationCount(results) : 0;
   const loadError = resultsError ?? judgesError ?? questionsError;
   const isInitialLoading =
     (judgesLoading && !judges) ||
@@ -141,99 +270,33 @@ export default function ResultsPage({ params }: { params: Promise<{ queueId: str
   }
 
   return (
-    <>
-      <Stack direction="row" alignItems="center" spacing={1} mb={3}>
-        <Button startIcon={<ArrowBackIcon />} onClick={() => router.push(`/queues/${queueId}`)}>
-          Back
-        </Button>
-        <Typography variant="h4" fontWeight={700}>
-          Results
-        </Typography>
-      </Stack>
-
-      <Box mb={2}>
-        <ResultsFilters
-          judges={judges ?? []}
-          questions={questions ?? []}
-          selectedJudges={selectedJudges}
-          selectedQuestions={selectedQuestions}
-          selectedVerdicts={selectedVerdicts}
-          onJudgesChange={(value) => {
-            setSelectedJudges(value);
-            setPage(1);
-          }}
-          onQuestionsChange={(value) => {
-            setSelectedQuestions(value);
-            setPage(1);
-          }}
-          onVerdictsChange={(value) => {
-            setSelectedVerdicts(value);
-            setPage(1);
-          }}
-        />
-      </Box>
-
-      {isInitialLoading ? (
-        <Box display="flex" justifyContent="center" mt={6}>
-          <CircularProgress />
-        </Box>
-      ) : loadError ? (
-        <Alert
-          severity="error"
-          action={
-            <Button color="inherit" size="small" onClick={() => void retryLoads()}>
-              Retry
-            </Button>
-          }
-        >
-          {loadError.message}
-        </Alert>
-      ) : results ? (
-        <>
-          <Paper sx={{ p: 2, mb: 2 }}>
-            <Stack direction={{ xs: 'column', md: 'row' }} spacing={3} alignItems={{ md: 'stretch' }}>
-              <Box minWidth={{ xs: '100%', md: 220 }}>
-                <Typography variant="h3" fontWeight={800} color="primary.main">
-                  {results.passRate}%
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Pass rate across completed evaluations in the current filter set.
-                </Typography>
-                <Typography variant="caption" color="text.secondary" display="block" mt={1}>
-                  {getPassRateSummary(results)}
-                </Typography>
-              </Box>
-              <Divider orientation="vertical" flexItem sx={{ display: { xs: 'none', md: 'block' } }} />
-              <Box flex={1} minWidth={0}>
-                <PassRateChart
-                  data={chartData}
-                  matchingTotal={results.total}
-                  completedTotal={completedEvaluations}
-                />
-              </Box>
-            </Stack>
-          </Paper>
-
-          <ResultsTable queueId={queueId} evaluations={results.evaluations} />
-
-          {results.total > results.pageSize ? (
-            <Stack direction="row" spacing={1} justifyContent="center" mt={2}>
-              <Button disabled={page <= 1} onClick={() => setPage(page - 1)}>
-                Previous
-              </Button>
-              <Typography alignSelf="center">Page {page}</Typography>
-              <Button
-                disabled={page * results.pageSize >= results.total}
-                onClick={() => setPage(page + 1)}
-              >
-                Next
-              </Button>
-            </Stack>
-          ) : null}
-        </>
-      ) : (
-        <Alert severity="error">Results data did not load.</Alert>
-      )}
-    </>
+    <ResultsPageContent
+      queueId={queueId}
+      judges={judges ?? []}
+      questions={questions ?? []}
+      results={results}
+      isInitialLoading={isInitialLoading}
+      loadError={loadError}
+      selectedJudges={selectedJudges}
+      selectedQuestions={selectedQuestions}
+      selectedVerdicts={selectedVerdicts}
+      page={page}
+      onBack={() => router.push(`/queues/${queueId}`)}
+      onRetry={() => retryLoads()}
+      onJudgesChange={(value) => {
+        setSelectedJudges(value);
+        setPage(1);
+      }}
+      onQuestionsChange={(value) => {
+        setSelectedQuestions(value);
+        setPage(1);
+      }}
+      onVerdictsChange={(value) => {
+        setSelectedVerdicts(value);
+        setPage(1);
+      }}
+      onPreviousPage={() => setPage((current) => current - 1)}
+      onNextPage={() => setPage((current) => current + 1)}
+    />
   );
 }

@@ -1,10 +1,12 @@
 'use client';
 
-import ArrowBackIcon from '@mui/icons-material/ArrowBack';
-import { Alert, Button, Stack, Typography } from '@mui/material';
+import { Alert, Typography } from '@mui/material';
 import { useRouter } from 'next/navigation';
 import { use, type ReactNode } from 'react';
 import AssignmentMatrix from '@/components/assign/AssignmentMatrix';
+import ReviewerWayfinding, {
+  createQueueReviewerBreadcrumbs,
+} from '@/components/navigation/ReviewerWayfinding';
 
 export const ASSIGN_PAGE_INTRO_COPY =
   'Check the boxes to assign judges to questions. Click a row to configure prompt fields.';
@@ -25,14 +27,12 @@ export function AssignPageContent({
 }: AssignPageContentProps) {
   return (
     <>
-      <Stack direction="row" alignItems="center" spacing={1} mb={3}>
-        <Button startIcon={<ArrowBackIcon />} onClick={onBack}>
-          Back
-        </Button>
-        <Typography variant="h4" fontWeight={700}>
-          Assign Judges
-        </Typography>
-      </Stack>
+      <ReviewerWayfinding
+        title="Assign Judges"
+        backLabel="Back to queue"
+        onBack={onBack}
+        breadcrumbs={createQueueReviewerBreadcrumbs(queueId, 'Assign Judges')}
+      />
       <Typography variant="body2" color="text.secondary" mb={1}>
         {ASSIGN_PAGE_INTRO_COPY}
       </Typography>
