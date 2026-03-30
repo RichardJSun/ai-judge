@@ -11,7 +11,8 @@ import {
     Stack,
     Typography,
 } from '@mui/material';
-import { useId, useState } from 'react';
+import { useId, useState, type ReactNode } from 'react';
+import ReviewerTimestamp from '@/lib/reviewer/reviewer-timestamp';
 import type {
     SubmissionDetailAnswer,
     SubmissionDetailAttachment,
@@ -21,25 +22,6 @@ import type {
 
 export interface SubmissionDetailViewProps {
     detail: SubmissionDetailResponse;
-}
-
-const DATE_TIME_FORMATTER = new Intl.DateTimeFormat('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    timeZone: 'UTC',
-    timeZoneName: 'short',
-});
-
-function formatDateTime(value: string | null) {
-    if (!value) {
-        return '—';
-    }
-
-    const parsed = new Date(value);
-    return Number.isNaN(parsed.getTime()) ? value : DATE_TIME_FORMATTER.format(parsed);
 }
 
 function formatAnswer(answer: SubmissionDetailAnswer) {
@@ -97,7 +79,7 @@ function MetadataField({
     monospace = false,
 }: {
     label: string;
-    value: string;
+    value: ReactNode;
     monospace?: boolean;
 }) {
     return (
@@ -329,8 +311,8 @@ export default function SubmissionDetailView({ detail }: SubmissionDetailViewPro
                         <MetadataField label="Queue" value={detail.queue.queue_id} monospace />
                         <MetadataField label="Submission" value={detail.submission.external_id} monospace />
                         <MetadataField label="Task ID" value={detail.submission.labeling_task_id ?? '—'} monospace />
-                        <MetadataField label="Submitted" value={formatDateTime(detail.submission.submitted_at)} />
-                        <MetadataField label="Captured" value={formatDateTime(detail.submission.created_at)} />
+                        <MetadataField label="Submitted" value={<ReviewerTimestamp value={detail.submission.submitted_at} />} />
+                        <MetadataField label="Captured" value={<ReviewerTimestamp value={detail.submission.created_at} />} />
                     </Stack>
 
                     <Divider />

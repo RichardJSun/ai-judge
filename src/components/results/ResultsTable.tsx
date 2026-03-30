@@ -22,6 +22,7 @@ import type { ReactNode } from 'react';
 import { useState } from 'react';
 import ReviewerTableSurface from '@/components/layout/ReviewerTableSurface';
 import { parsePlanMarker, type EvaluationPlanMarker } from '@/lib/ai/plan-marker';
+import ReviewerTimestamp from '@/lib/reviewer/reviewer-timestamp';
 import {
   buildSubmissionDetailResultsHref,
   type ResultsPageUrlState,
@@ -34,16 +35,6 @@ export interface ResultsTableProps {
   evaluations: ResultsEvaluation[];
   resultsContext?: ResultsPageUrlState;
 }
-
-const CREATED_AT_FORMATTER = new Intl.DateTimeFormat('en-US', {
-  month: 'short',
-  day: 'numeric',
-  year: 'numeric',
-  hour: 'numeric',
-  minute: '2-digit',
-  timeZone: 'UTC',
-  timeZoneName: 'short',
-});
 
 const DEFAULT_RESULTS_CONTEXT: ResultsPageUrlState = {
   page: 1,
@@ -75,11 +66,6 @@ const AUDIT_HIT_AREA_BUTTON_SX = {
     backgroundColor: 'action.hover',
   },
 } as const;
-
-export function formatCreatedAt(createdAt: string) {
-  const value = new Date(createdAt);
-  return Number.isNaN(value.getTime()) ? createdAt : CREATED_AT_FORMATTER.format(value);
-}
 
 export function summarizeReasoning(reasoning: string | null, maxLength = 160) {
   if (!reasoning) {
@@ -309,7 +295,7 @@ function ExpandableRow({
             onToggle={toggleRow}
           >
             <Typography component="span" fontSize={12} color="text.secondary">
-              {formatCreatedAt(evaluation.created_at)}
+              <ReviewerTimestamp value={evaluation.created_at} />
             </Typography>
           </AuditHitArea>
         </TableCell>

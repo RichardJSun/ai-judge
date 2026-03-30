@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'bun:test';
 import { renderToStaticMarkup } from 'react-dom/server';
-import type { ResultsEvaluation } from '@/types/api';
+import { REVIEWER_TIMESTAMP_SOURCE } from '@/lib/reviewer/reviewer-timestamp';
 import { REVIEWER_TABLE_SURFACE_TEST_ID } from '@/components/layout/ReviewerTableSurface';
 import type { ResultsPageUrlState } from '@/lib/results/results-page-url';
-import ResultsTable, { formatCreatedAt, summarizeReasoning } from './ResultsTable';
+import type { ResultsEvaluation } from '@/types/api';
+import ResultsTable, { summarizeReasoning } from './ResultsTable';
 
 const QUEUE_ID = 'queue-1';
 const LONG_REASONING = [
@@ -117,7 +118,9 @@ describe('ResultsTable', () => {
     expect(html).toContain(evaluation.judge.name);
     expect(html).toContain('Pass');
     expect(html).toContain(summarizeReasoning(evaluation.reasoning));
-    expect(html).toContain(formatCreatedAt(evaluation.created_at));
+    expect(html).toContain(`data-reviewer-timestamp-source="${REVIEWER_TIMESTAMP_SOURCE}"`);
+    expect(html).toContain('data-reviewer-timestamp-state="fallback"');
+    expect(html).toContain(`>${evaluation.created_at}</time>`);
     expect(html).toContain('Evaluation status');
     expect(html).toContain('completed');
     expect(html).toContain('Prompt snapshot');
@@ -144,6 +147,7 @@ describe('ResultsTable', () => {
             retry_count: 2,
             error_message: 'Gateway timed out after retries.',
             status: 'error',
+            created_at: 'not-a-real-timestamp',
             submission: {
               id: 'submission-2',
               external_id: longExternalId,
@@ -164,6 +168,8 @@ describe('ResultsTable', () => {
     );
     expect(html).toContain('Judge Atlas');
     expect(html).toContain('Error');
+    expect(html).toContain('not-a-real-timestamp');
+    expect(html).toContain('data-reviewer-timestamp-state="invalid"');
     expect(html).toContain('—');
     expect(html).toContain('Evaluation status');
     expect(html).toContain('error');

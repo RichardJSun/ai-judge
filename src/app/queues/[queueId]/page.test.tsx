@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { REVIEWER_TIMESTAMP_SOURCE } from '@/lib/reviewer/reviewer-timestamp';
 import {
     createQueueSubmissionsPageCanonicalState,
     getQueueSubmissionsPageQueryKey,
@@ -121,6 +122,9 @@ describe('QueuePageContent', () => {
         expect(html).toContain('aria-current="page"');
         expect(html).toContain('Previous');
         expect(html).toContain('Next');
+        expect(html).toContain(`data-reviewer-timestamp-source="${REVIEWER_TIMESTAMP_SOURCE}"`);
+        expect(html.split('data-reviewer-timestamp-state="fallback"')).toHaveLength(5);
+        expect(html).toContain('>2026-03-28T10:05:00.000Z</time>');
     });
 
     it('keeps parser or fetch failures visible under the shared header with a retry action', () => {
@@ -154,7 +158,8 @@ describe('QueuePageContent', () => {
 
         expect(html).toContain('SUBMISSION-EXTERNAL-ID-WITH-LONG-TEXT-022');
         expect(html).toContain('href="/queues/queue-1/submissions/submission-22?source=queue&amp;page=2"');
-        expect(html).toContain('>—<');
+        expect(html).toContain('data-reviewer-timestamp-state="empty"');
+        expect(html).toContain('>—</span>');
     });
 
     it('preserves explicit first-page queue context in submission detail links', () => {

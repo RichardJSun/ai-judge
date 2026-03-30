@@ -20,12 +20,10 @@ import {
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useEffect, useMemo, useCallback } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import ReviewerTableSurface from '@/components/layout/ReviewerTableSurface';
 import ReviewerPagination from '@/components/pagination/ReviewerPagination';
-import {
-    fetchQueueSubmissions,
-} from '@/lib/submissions/fetch-json';
+import ReviewerTimestamp from '@/lib/reviewer/reviewer-timestamp';
 import {
     buildQueueSubmissionDetailHref,
     buildQueueSubmissionsPageHref,
@@ -35,6 +33,7 @@ import {
     type QueueSubmissionsPageSearchParams,
     type QueueSubmissionsPageUrlState,
 } from '@/lib/queues/queue-submissions-page-url';
+import { fetchQueueSubmissions } from '@/lib/submissions/fetch-json';
 import type { QueueSubmissionsResponse } from '@/types/api';
 
 export interface QueuePageContentProps {
@@ -168,7 +167,7 @@ export function QueuePageContent({
                                         </TableCell>
                                         <TableCell sx={{ whiteSpace: 'nowrap' }}>{submission.labeling_task_id ?? '—'}</TableCell>
                                         <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                                            {submission.submitted_at ? new Date(submission.submitted_at).toLocaleString() : '—'}
+                                            <ReviewerTimestamp value={submission.submitted_at} />
                                         </TableCell>
                                     </TableRow>
                                 ))}

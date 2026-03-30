@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { REVIEWER_TIMESTAMP_SOURCE } from '@/lib/reviewer/reviewer-timestamp';
 import type { SubmissionDetailResponse } from '@/types/api';
 import SubmissionDetailView from './SubmissionDetailView';
 
@@ -98,6 +99,9 @@ describe('SubmissionDetailView', () => {
         expect(html).toContain('>9<');
         expect(html).toContain('>7<');
         expect(html).toContain('>2<');
+        expect(html).toContain(`data-reviewer-timestamp-source="${REVIEWER_TIMESTAMP_SOURCE}"`);
+        expect(html).toContain('data-reviewer-timestamp-state="fallback"');
+        expect(html).toContain('>2026-03-28T10:05:00.000Z</time>');
     });
 
     it('renders readable answered, structured-only, and missing states without inventing fallbacks', () => {
@@ -205,7 +209,7 @@ describe('SubmissionDetailView', () => {
         expect(html).not.toContain('Show raw payload');
     });
 
-    it('renders null optional submission metadata safely', () => {
+    it('renders null and invalid optional submission metadata safely', () => {
         const html = renderToStaticMarkup(
             <SubmissionDetailView
                 detail={createDetailResponse({
@@ -215,7 +219,7 @@ describe('SubmissionDetailView', () => {
                         external_id: 'SUB-001',
                         labeling_task_id: null,
                         submitted_at: null,
-                        created_at: '2026-03-28T10:05:00.000Z',
+                        created_at: 'not-a-real-timestamp',
                     },
                 })}
             />
@@ -223,6 +227,8 @@ describe('SubmissionDetailView', () => {
 
         expect(html).toContain('Task ID');
         expect(html).toContain('Submitted');
-        expect(html.match(/>—</g)?.length).toBeGreaterThanOrEqual(2);
+        expect(html).toContain('data-reviewer-timestamp-state="empty"');
+        expect(html).toContain('data-reviewer-timestamp-state="invalid"');
+        expect(html).toContain('>not-a-real-timestamp</span>');
     });
 });
