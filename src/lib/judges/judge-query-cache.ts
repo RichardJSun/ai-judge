@@ -6,6 +6,10 @@ export function getJudgePageQueryKey(page: number) {
   return ['judges-page', page] as const;
 }
 
+export function getJudgePagesQueryKey() {
+  return ['judges-page'] as const;
+}
+
 export function getJudgeDetailQueryKey(judgeId: string) {
   return ['judge', judgeId] as const;
 }
@@ -60,7 +64,9 @@ export function reconcileSavedJudgePage(
   };
 }
 
-type JudgeQueryClient = Pick<QueryClient, 'getQueryState' | 'invalidateQueries' | 'setQueryData'>;
+type JudgeQueryClient = Pick<QueryClient, 'getQueryState' | 'invalidateQueries' | 'setQueryData'> & {
+  setQueriesData?: QueryClient['setQueriesData'];
+};
 
 export async function reconcileSavedJudgeCaches({
   queryClient,
@@ -68,12 +74,18 @@ export async function reconcileSavedJudgeCaches({
   savedJudge,
 }: {
   queryClient: JudgeQueryClient;
-  page: number;
+  page?: number;
   savedJudge: Judge;
 }) {
-  queryClient.setQueryData<JudgePageResponse>(getJudgePageQueryKey(page), (current) =>
-    reconcileSavedJudgePage(current, savedJudge)
-  );
+  if (typeof page === 'number') {
+    queryClient.setQueryData<JudgePageResponse>(getJudgePageQueryKey(page), (current) =>
+      reconcileSavedJudgePage(current, savedJudge)
+    );
+  } else if (queryClient.setQueriesData) {
+    queryClient.setQueriesData<JudgePageResponse>({ queryKey: getJudgePagesQueryKey() }, (current) =>
+      reconcileSavedJudgePage(current, savedJudge)
+    );
+  }
 
   if (queryClient.getQueryState(getJudgeDetailQueryKey(savedJudge.id))) {
     queryClient.setQueryData(getJudgeDetailQueryKey(savedJudge.id), savedJudge);

@@ -300,6 +300,62 @@ describe('judge query cache helpers', () => {
         expect(legacyUpdater([createJudge(), createJudge({ id: 'judge-27', name: 'Judge 27' })])[1]).toEqual(savedJudge);
         expect(invalidateCalls).toEqual([{ queryKey: ['judges'] }]);
     });
+
+    it('reconciles every cached judge page when the fallback route saves without list-page context', async () => {
+        const savedJudge = createJudge({ id: 'judge-27', name: 'Judge 27 Updated', active: false });
+        const pageCacheCalls: Array<[unknown, unknown]> = [];
+        const directCacheCalls: Array<[unknown, unknown]> = [];
+        const invalidateCalls: unknown[] = [];
+
+        await reconcileSavedJudgeCaches({
+            queryClient: {
+                getQueryState: (queryKey) => {
+                    if (
+                        JSON.stringify(queryKey) === JSON.stringify(getJudgeDetailQueryKey(savedJudge.id)) ||
+                        JSON.stringify(queryKey) === JSON.stringify(getJudgesQueryKey())
+                    ) {
+                        return { dataUpdatedAt: 1 } as never;
+                    }
+
+                    return undefined;
+                },
+                invalidateQueries: async (filters) => {
+                    invalidateCalls.push(filters);
+                },
+                setQueriesData: (filters, updater) => {
+                    pageCacheCalls.push([filters, updater]);
+                    return [];
+                },
+                setQueryData: (queryKey, updater) => {
+                    directCacheCalls.push([queryKey, updater]);
+                    return undefined;
+                },
+            },
+            savedJudge,
+        });
+
+        expect(pageCacheCalls[0]?.[0]).toEqual({ queryKey: ['judges-page'] });
+        const pageUpdater = pageCacheCalls[0]?.[1] as (current: JudgePageResponse | undefined) => JudgePageResponse | undefined;
+        const legacyUpdater = directCacheCalls[1]?.[1] as (current: Judge[] | undefined) => Judge[];
+
+        expect(
+            pageUpdater(
+                createJudgePageResponse({
+                    judges: [
+                        createJudge(),
+                        createJudge({ id: 'judge-27', name: 'Judge 27', active: true }),
+                    ],
+                })
+            )?.judges[1]
+        ).toEqual(savedJudge);
+        expect(directCacheCalls.map(([queryKey]) => queryKey)).toEqual([
+            ['judge', 'judge-27'],
+            ['judges'],
+        ]);
+        expect(directCacheCalls.some(([queryKey]) => JSON.stringify(queryKey).startsWith('["judges-page"'))).toBe(false);
+        expect(legacyUpdater([createJudge(), createJudge({ id: 'judge-27', name: 'Judge 27' })])[1]).toEqual(savedJudge);
+        expect(invalidateCalls).toEqual([{ queryKey: ['judges'] }]);
+    });
 });
 
 describe('JudgesPageContent', () => {

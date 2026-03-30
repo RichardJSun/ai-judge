@@ -1,8 +1,6 @@
 'use client';
 
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
-import PauseCircleOutlineIcon from '@mui/icons-material/PauseCircleOutline';
-import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline';
 import {
   Alert,
   Box,
@@ -15,9 +13,11 @@ import {
 } from '@mui/material';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
-import { use, useState } from 'react';
+import { use, type ReactNode, useState } from 'react';
+import { buildJudgeSaveSuccessMessage, persistJudgeUpdate } from '../JudgesPageClient';
 import JudgeForm from '@/components/judges/JudgeForm';
 import { parseJudgeRecord } from '@/lib/judges/judge-lifecycle';
+import { reconcileSavedJudgeCaches } from '@/lib/judges/judge-query-cache';
 import type { Judge } from '@/types/db';
 
 function getApiErrorMessage(payload: unknown, fallback: string) {
@@ -42,25 +42,7 @@ async function readResponseBody(response: Response, fallback: string) {
   }
 }
 
-function upsertJudgeInList(current: Judge[] | undefined, nextJudge: Judge) {
-  if (!current?.length) {
-    return [nextJudge];
-  }
-
-  let found = false;
-  const updated = current.map((judge) => {
-    if (judge.id !== nextJudge.id) {
-      return judge;
-    }
-
-    found = true;
-    return nextJudge;
-  });
-
-  return found ? updated : [nextJudge, ...updated];
-}
-
-async function fetchJudge(judgeId: string) {
+export async function fetchJudge(judgeId: string) {
   const response = await fetch(`/api/judges/${judgeId}`);
   const body = await readResponseBody(response, 'Failed to load judge.');
 
@@ -71,68 +53,36 @@ async function fetchJudge(judgeId: string) {
   return parseJudgeRecord(body, `/api/judges/${judgeId} response`);
 }
 
-async function persistJudgeUpdate(
-  judgeId: string,
-  payload: { name?: string; system_prompt?: string; model?: string; active?: boolean }
-) {
-  const response = await fetch(`/api/judges/${judgeId}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-  const body = await readResponseBody(response, 'Failed to save judge.');
+type JudgeFormData = {
+  name: string;
+  system_prompt: string;
+  model: string;
+  active: boolean;
+};
 
-  if (!response.ok) {
-    throw new Error(getApiErrorMessage(body, 'Failed to save judge.'));
-  }
-
-  return parseJudgeRecord(body, `PATCH /api/judges/${judgeId} response`);
+export interface EditJudgePageContentProps {
+  judge?: Judge | null;
+  isLoading: boolean;
+  isError?: boolean;
+  error?: Error | null;
+  onRetry?: () => unknown | Promise<unknown>;
+  onBack?: () => void;
+  onSave?: (data: JudgeFormData) => Promise<void>;
+  saveError?: Error | null;
+  statusMessage?: ReactNode;
 }
 
-export default function EditJudgePage({ params }: { params: Promise<{ judgeId: string }> }) {
-  const { judgeId } = use(params);
-  const router = useRouter();
-  const qc = useQueryClient();
-  const [statusMessage, setStatusMessage] = useState<string | null>(null);
-
-  const { data: judge, isLoading, isError, error, refetch } = useQuery<Judge, Error>({
-    queryKey: ['judge', judgeId],
-    queryFn: () => fetchJudge(judgeId),
-  });
-
-  const saveJudgeMutation = useMutation({
-    mutationFn: (body: { name: string; system_prompt: string; model: string; active: boolean }) =>
-      persistJudgeUpdate(judgeId, body),
-    onMutate: () => {
-      setStatusMessage(null);
-    },
-    onSuccess: (savedJudge) => {
-      qc.setQueryData(['judge', judgeId], savedJudge);
-      qc.setQueryData<Judge[]>(['judges'], (current) => upsertJudgeInList(current, savedJudge));
-      setStatusMessage(
-        savedJudge.active
-          ? 'Saved judge changes. This judge remains active.'
-          : 'Saved judge changes. This judge is now inactive but still persisted for history.'
-      );
-    },
-  });
-
-  const lifecycleMutation = useMutation({
-    mutationFn: (active: boolean) => persistJudgeUpdate(judgeId, { active }),
-    onMutate: () => {
-      setStatusMessage(null);
-    },
-    onSuccess: (savedJudge) => {
-      qc.setQueryData(['judge', judgeId], savedJudge);
-      qc.setQueryData<Judge[]>(['judges'], (current) => upsertJudgeInList(current, savedJudge));
-      setStatusMessage(
-        savedJudge.active
-          ? 'Judge reactivated. The same persisted judge row is active again.'
-          : 'Judge deactivated. The row stays visible for history and can be reactivated later.'
-      );
-    },
-  });
-
+export function EditJudgePageContent({
+  judge,
+  isLoading,
+  isError = false,
+  error = null,
+  onRetry = () => undefined,
+  onBack = () => undefined,
+  onSave = async () => undefined,
+  saveError = null,
+  statusMessage = null,
+}: EditJudgePageContentProps) {
   if (isLoading) {
     return (
       <Box display="flex" justifyContent="center" mt={6}>
@@ -144,18 +94,18 @@ export default function EditJudgePage({ params }: { params: Promise<{ judgeId: s
   if (isError) {
     return (
       <Stack spacing={2}>
-        <Button startIcon={<ArrowBackIcon />} onClick={() => router.push('/judges')} sx={{ width: 'fit-content' }}>
+        <Button startIcon={<ArrowBackIcon />} onClick={onBack} sx={{ width: 'fit-content' }}>
           Judges
         </Button>
         <Alert
           severity="error"
           action={
-            <Button color="inherit" size="small" onClick={() => refetch()}>
+            <Button color="inherit" size="small" onClick={() => void onRetry()}>
               Retry
             </Button>
           }
         >
-          {error.message}
+          {error?.message ?? 'Failed to load judge.'}
         </Alert>
       </Stack>
     );
@@ -165,54 +115,72 @@ export default function EditJudgePage({ params }: { params: Promise<{ judgeId: s
     return <Alert severity="error">Judge not found.</Alert>;
   }
 
-  const lifecycleBusy = lifecycleMutation.isPending || saveJudgeMutation.isPending;
-
   return (
     <Stack spacing={3}>
-      <Stack direction="row" alignItems="center" justifyContent="space-between" gap={2} flexWrap="wrap">
-        <Stack direction="row" alignItems="center" spacing={1} flexWrap="wrap" useFlexGap>
-          <Button startIcon={<ArrowBackIcon />} onClick={() => router.push('/judges')}>
-            Judges
-          </Button>
-          <Typography variant="h5" fontWeight={700}>
-            {judge.name}
-          </Typography>
-          <Chip
-            label={judge.active ? 'Active' : 'Inactive'}
-            color={judge.active ? 'success' : 'default'}
-            size="small"
-          />
-        </Stack>
-        <Button
-          color={judge.active ? 'warning' : 'success'}
-          variant="outlined"
-          startIcon={judge.active ? <PauseCircleOutlineIcon /> : <PlayCircleOutlineIcon />}
-          onClick={() => lifecycleMutation.mutate(!judge.active)}
-          disabled={lifecycleBusy}
-        >
-          {judge.active ? 'Deactivate' : 'Reactivate'}
+      <Stack direction="row" alignItems="center" gap={2} flexWrap="wrap">
+        <Button startIcon={<ArrowBackIcon />} onClick={onBack}>
+          Judges
         </Button>
+        <Typography variant="h5" fontWeight={700}>
+          {judge.name}
+        </Typography>
+        <Chip label={judge.active ? 'Active' : 'Inactive'} color={judge.active ? 'success' : 'default'} size="small" />
       </Stack>
 
       <Alert severity={judge.active ? 'info' : 'warning'}>
         {judge.active
-          ? 'Active judges can be assigned and used in runs. Deactivate instead of deleting when you want to preserve history.'
-          : 'This judge is inactive. It remains persisted for history and can be reactivated without losing identity.'}
+          ? 'Active judges can be assigned and used in runs. Save the form to change this judge\'s active state.'
+          : 'This judge is inactive. It remains persisted for history and can be reactivated from the form without losing identity.'}
       </Alert>
 
       {statusMessage ? <Alert severity="success">{statusMessage}</Alert> : null}
-      {lifecycleMutation.isError ? <Alert severity="error">{lifecycleMutation.error.message}</Alert> : null}
+      {saveError ? <Alert severity="error">{saveError.message}</Alert> : null}
 
       <Paper sx={{ p: 3, maxWidth: 720 }}>
-        <JudgeForm
-          initial={judge}
-          onSave={async (data) => {
-            await saveJudgeMutation.mutateAsync(data);
-          }}
-          onCancel={() => router.push('/judges')}
-          submitLabel="Save Changes"
-        />
+        <JudgeForm initial={judge} onSave={onSave} onCancel={onBack} submitLabel="Save Changes" />
       </Paper>
     </Stack>
+  );
+}
+
+export default function EditJudgePage({ params }: { params: Promise<{ judgeId: string }> }) {
+  const { judgeId } = use(params);
+  const router = useRouter();
+  const queryClient = useQueryClient();
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+
+  const { data: judge, isLoading, isError, error, refetch } = useQuery<Judge, Error>({
+    queryKey: ['judge', judgeId],
+    queryFn: () => fetchJudge(judgeId),
+  });
+
+  const saveJudgeMutation = useMutation({
+    mutationFn: (body: JudgeFormData) => persistJudgeUpdate(judgeId, body),
+    onMutate: () => {
+      setStatusMessage(null);
+    },
+    onSuccess: async (savedJudge) => {
+      await reconcileSavedJudgeCaches({
+        queryClient,
+        savedJudge,
+      });
+      setStatusMessage(buildJudgeSaveSuccessMessage(savedJudge));
+    },
+  });
+
+  return (
+    <EditJudgePageContent
+      judge={judge}
+      isLoading={isLoading}
+      isError={isError}
+      error={error}
+      onRetry={refetch}
+      onBack={() => router.push('/judges')}
+      onSave={async (data) => {
+        await saveJudgeMutation.mutateAsync(data);
+      }}
+      saveError={saveJudgeMutation.error}
+      statusMessage={statusMessage}
+    />
   );
 }
