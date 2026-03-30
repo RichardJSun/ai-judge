@@ -1,0 +1,679 @@
+[
+  {
+    "id": "sub_m008_s03_01",
+    "queueId": "queue_m008_s03_live_high_cardinality",
+    "labelingTaskId": "task_m008_s03_live_high_cardinality",
+    "createdAt": 1712102400000,
+    "questions": [
+      {
+        "rev": 1,
+        "data": {
+          "id": "q_template_m008_s03_live_1",
+          "questionType": "single_choice_with_reasoning",
+          "questionText": "Does the answer provide a grounded justification?"
+        }
+      },
+      {
+        "rev": 1,
+        "data": {
+          "id": "q_template_m008_s03_live_2",
+          "questionType": "free_text",
+          "questionText": "Is the conclusion supported by the evidence?"
+        }
+      }
+    ],
+    "answers": {}
+  },
+  {
+    "id": "sub_m008_s03_02",
+    "queueId": "queue_m008_s03_live_high_cardinality",
+    "labelingTaskId": "task_m008_s03_live_high_cardinality",
+    "createdAt": 1712102460000,
+    "questions": [
+      {
+        "rev": 1,
+        "data": {
+          "id": "q_template_m008_s03_live_1",
+          "questionType": "single_choice_with_reasoning",
+          "questionText": "Does the answer provide a grounded justification?"
+        }
+      },
+      {
+        "rev": 1,
+        "data": {
+          "id": "q_template_m008_s03_live_2",
+          "questionType": "free_text",
+          "questionText": "Is the conclusion supported by the evidence?"
+        }
+      }
+    ],
+    "answers": {}
+  },
+  {
+    "id": "sub_m008_s03_03",
+    "queueId": "queue_m008_s03_live_high_cardinality",
+    "labelingTaskId": "task_m008_s03_live_high_cardinality",
+    "createdAt": 1712102520000,
+    "questions": [
+      {
+        "rev": 1,
+        "data": {
+          "id": "q_template_m008_s03_live_1",
+          "questionType": "single_choice_with_reasoning",
+          "questionText": "Does the answer provide a grounded justification?"
+        }
+      },
+      {
+        "rev": 1,
+        "data": {
+          "id": "q_template_m008_s03_live_2",
+          "questionType": "free_text",
+          "questionText": "Is the conclusion supported by the evidence?"
+        }
+      }
+    ],
+    "answers": {}
+  },
+  {
+    "id": "sub_m008_s03_04",
+    "queueId": "queue_m008_s03_live_high_cardinality",
+    "labelingTaskId": "task_m008_s03_live_high_cardinality",
+    "createdAt": 1712102580000,
+    "questions": [
+      {
+        "rev": 1,
+        "data": {
+          "id": "q_template_m008_s03_live_1",
+          "questionType": "single_choice_with_reasoning",
+          "questionText": "Does the answer provide a grounded justification?"
+        }
+      },
+      {
+        "rev": 1,
+        "data": {
+          "id": "q_template_m008_s03_live_2",
+          "questionType": "free_text",
+          "questionText": "Is the conclusion supported by the evidence?"
+        }
+      }
+    ],
+    "answers": {}
+  },
+  {
+    "id": "sub_m008_s03_05",
+    "queueId": "queue_m008_s03_live_high_cardinality",
+    "labelingTaskId": "task_m008_s03_live_high_cardinality",
+    "createdAt": 1712102640000,
+    "questions": [
+      {
+        "rev": 1,
+        "data": {
+          "id": "q_template_m008_s03_live_1",
+          "questionType": "single_choice_with_reasoning",
+          "questionText": "Does the answer provide a grounded justification?"
+        }
+      },
+      {
+        "rev": 1,
+        "data": {
+          "id": "q_template_m008_s03_live_2",
+          "questionType": "free_text",
+          "questionText": "Is the conclusion supported by the evidence?"
+        }
+      }
+    ],
+    "answers": {}
+  },
+  {
+    "id": "sub_m008_s03_06",
+    "queueId": "queue_m008_s03_live_high_cardinality",
+    "labelingTaskId": "task_m008_s03_live_high_cardinality",
+    "createdAt": 1712102700000,
+    "questions": [
+      {
+        "rev": 1,
+        "data": {
+          "id": "q_template_m008_s03_live_1",
+          "questionType": "single_choice_with_reasoning",
+          "questionText": "Does the answer provide a grounded justification?"
+        }
+      },
+      {
+        "rev": 1,
+        "data": {
+          "id": "q_template_m008_s03_live_2",
+          "questionType": "free_text",
+          "questionText": "Is the conclusion supported by the evidence?"
+        }
+      }
+    ],
+    "answers": {}
+  },
+  {
+    "id": "sub_m008_s03_07",
+    "queueId": "queue_m008_s03_live_high_cardinality",
+    "labelingTaskId": "task_m008_s03_live_high_cardinality",
+    "createdAt": 1712102760000,
+    "questions": [
+      {
+        "rev": 1,
+        "data": {
+          "id": "q_template_m008_s03_live_1",
+          "questionType": "single_choice_with_reasoning",
+          "questionText": "Does the answer provide a grounded justification?"
+        }
+      },
+      {
+        "rev": 1,
+        "data": {
+          "id": "q_template_m008_s03_live_2",
+          "questionType": "free_text",
+          "questionText": "Is the conclusion supported by the evidence?"
+        }
+      }
+    ],
+    "answers": {}
+  },
+  {
+    "id": "sub_m008_s03_08",
+    "queueId": "queue_m008_s03_live_high_cardinality",
+    "labelingTaskId": "task_m008_s03_live_high_cardinality",
+    "createdAt": 1712102820000,
+    "questions": [
+      {
+        "rev": 1,
+        "data": {
+          "id": "q_template_m008_s03_live_1",
+          "questionType": "single_choice_with_reasoning",
+          "questionText": "Does the answer provide a grounded justification?"
+        }
+      },
+      {
+        "rev": 1,
+        "data": {
+          "id": "q_template_m008_s03_live_2",
+          "questionType": "free_text",
+          "questionText": "Is the conclusion supported by the evidence?"
+        }
+      }
+    ],
+    "answers": {}
+  },
+  {
+    "id": "sub_m008_s03_09",
+    "queueId": "queue_m008_s03_live_high_cardinality",
+    "labelingTaskId": "task_m008_s03_live_high_cardinality",
+    "createdAt": 1712102880000,
+    "questions": [
+      {
+        "rev": 1,
+        "data": {
+          "id": "q_template_m008_s03_live_1",
+          "questionType": "single_choice_with_reasoning",
+          "questionText": "Does the answer provide a grounded justification?"
+        }
+      },
+      {
+        "rev": 1,
+        "data": {
+          "id": "q_template_m008_s03_live_2",
+          "questionType": "free_text",
+          "questionText": "Is the conclusion supported by the evidence?"
+        }
+      }
+    ],
+    "answers": {}
+  },
+  {
+    "id": "sub_m008_s03_10",
+    "queueId": "queue_m008_s03_live_high_cardinality",
+    "labelingTaskId": "task_m008_s03_live_high_cardinality",
+    "createdAt": 1712102940000,
+    "questions": [
+      {
+        "rev": 1,
+        "data": {
+          "id": "q_template_m008_s03_live_1",
+          "questionType": "single_choice_with_reasoning",
+          "questionText": "Does the answer provide a grounded justification?"
+        }
+      },
+      {
+        "rev": 1,
+        "data": {
+          "id": "q_template_m008_s03_live_2",
+          "questionType": "free_text",
+          "questionText": "Is the conclusion supported by the evidence?"
+        }
+      }
+    ],
+    "answers": {}
+  },
+  {
+    "id": "sub_m008_s03_11",
+    "queueId": "queue_m008_s03_live_high_cardinality",
+    "labelingTaskId": "task_m008_s03_live_high_cardinality",
+    "createdAt": 1712103000000,
+    "questions": [
+      {
+        "rev": 1,
+        "data": {
+          "id": "q_template_m008_s03_live_1",
+          "questionType": "single_choice_with_reasoning",
+          "questionText": "Does the answer provide a grounded justification?"
+        }
+      },
+      {
+        "rev": 1,
+        "data": {
+          "id": "q_template_m008_s03_live_2",
+          "questionType": "free_text",
+          "questionText": "Is the conclusion supported by the evidence?"
+        }
+      }
+    ],
+    "answers": {}
+  },
+  {
+    "id": "sub_m008_s03_12",
+    "queueId": "queue_m008_s03_live_high_cardinality",
+    "labelingTaskId": "task_m008_s03_live_high_cardinality",
+    "createdAt": 1712103060000,
+    "questions": [
+      {
+        "rev": 1,
+        "data": {
+          "id": "q_template_m008_s03_live_1",
+          "questionType": "single_choice_with_reasoning",
+          "questionText": "Does the answer provide a grounded justification?"
+        }
+      },
+      {
+        "rev": 1,
+        "data": {
+          "id": "q_template_m008_s03_live_2",
+          "questionType": "free_text",
+          "questionText": "Is the conclusion supported by the evidence?"
+        }
+      }
+    ],
+    "answers": {}
+  },
+  {
+    "id": "sub_m008_s03_13",
+    "queueId": "queue_m008_s03_live_high_cardinality",
+    "labelingTaskId": "task_m008_s03_live_high_cardinality",
+    "createdAt": 1712103120000,
+    "questions": [
+      {
+        "rev": 1,
+        "data": {
+          "id": "q_template_m008_s03_live_1",
+          "questionType": "single_choice_with_reasoning",
+          "questionText": "Does the answer provide a grounded justification?"
+        }
+      },
+      {
+        "rev": 1,
+        "data": {
+          "id": "q_template_m008_s03_live_2",
+          "questionType": "free_text",
+          "questionText": "Is the conclusion supported by the evidence?"
+        }
+      }
+    ],
+    "answers": {
+      "q_template_m008_s03_live_1": {
+        "verdictHint": "pass",
+        "evidence": "Grounded evidence block #13 cites the relevant source and constraint.",
+        "notes": "Primary verifier proof row for submission 13."
+      },
+      "q_template_m008_s03_live_2": {
+        "verdictHint": "fail",
+        "evidence": "Secondary review note #13 remains intentionally mixed for coverage.",
+        "notes": "Secondary question keeps the upstream verifier on a single results page."
+      }
+    }
+  },
+  {
+    "id": "sub_m008_s03_14",
+    "queueId": "queue_m008_s03_live_high_cardinality",
+    "labelingTaskId": "task_m008_s03_live_high_cardinality",
+    "createdAt": 1712103180000,
+    "questions": [
+      {
+        "rev": 1,
+        "data": {
+          "id": "q_template_m008_s03_live_1",
+          "questionType": "single_choice_with_reasoning",
+          "questionText": "Does the answer provide a grounded justification?"
+        }
+      },
+      {
+        "rev": 1,
+        "data": {
+          "id": "q_template_m008_s03_live_2",
+          "questionType": "free_text",
+          "questionText": "Is the conclusion supported by the evidence?"
+        }
+      }
+    ],
+    "answers": {
+      "q_template_m008_s03_live_1": {
+        "verdictHint": "pass",
+        "evidence": "Grounded evidence block #14 cites the relevant source and constraint.",
+        "notes": "Primary verifier proof row for submission 14."
+      }
+    }
+  },
+  {
+    "id": "sub_m008_s03_15",
+    "queueId": "queue_m008_s03_live_high_cardinality",
+    "labelingTaskId": "task_m008_s03_live_high_cardinality",
+    "createdAt": 1712103240000,
+    "questions": [
+      {
+        "rev": 1,
+        "data": {
+          "id": "q_template_m008_s03_live_1",
+          "questionType": "single_choice_with_reasoning",
+          "questionText": "Does the answer provide a grounded justification?"
+        }
+      },
+      {
+        "rev": 1,
+        "data": {
+          "id": "q_template_m008_s03_live_2",
+          "questionType": "free_text",
+          "questionText": "Is the conclusion supported by the evidence?"
+        }
+      }
+    ],
+    "answers": {
+      "q_template_m008_s03_live_1": {
+        "verdictHint": "pass",
+        "evidence": "Grounded evidence block #15 cites the relevant source and constraint.",
+        "notes": "Primary verifier proof row for submission 15."
+      }
+    }
+  },
+  {
+    "id": "sub_m008_s03_16",
+    "queueId": "queue_m008_s03_live_high_cardinality",
+    "labelingTaskId": "task_m008_s03_live_high_cardinality",
+    "createdAt": 1712103300000,
+    "questions": [
+      {
+        "rev": 1,
+        "data": {
+          "id": "q_template_m008_s03_live_1",
+          "questionType": "single_choice_with_reasoning",
+          "questionText": "Does the answer provide a grounded justification?"
+        }
+      },
+      {
+        "rev": 1,
+        "data": {
+          "id": "q_template_m008_s03_live_2",
+          "questionType": "free_text",
+          "questionText": "Is the conclusion supported by the evidence?"
+        }
+      }
+    ],
+    "answers": {
+      "q_template_m008_s03_live_1": {
+        "verdictHint": "pass",
+        "evidence": "Grounded evidence block #16 cites the relevant source and constraint.",
+        "notes": "Primary verifier proof row for submission 16."
+      }
+    }
+  },
+  {
+    "id": "sub_m008_s03_17",
+    "queueId": "queue_m008_s03_live_high_cardinality",
+    "labelingTaskId": "task_m008_s03_live_high_cardinality",
+    "createdAt": 1712103360000,
+    "questions": [
+      {
+        "rev": 1,
+        "data": {
+          "id": "q_template_m008_s03_live_1",
+          "questionType": "single_choice_with_reasoning",
+          "questionText": "Does the answer provide a grounded justification?"
+        }
+      },
+      {
+        "rev": 1,
+        "data": {
+          "id": "q_template_m008_s03_live_2",
+          "questionType": "free_text",
+          "questionText": "Is the conclusion supported by the evidence?"
+        }
+      }
+    ],
+    "answers": {
+      "q_template_m008_s03_live_1": {
+        "verdictHint": "pass",
+        "evidence": "Grounded evidence block #17 cites the relevant source and constraint.",
+        "notes": "Primary verifier proof row for submission 17."
+      }
+    }
+  },
+  {
+    "id": "sub_m008_s03_18",
+    "queueId": "queue_m008_s03_live_high_cardinality",
+    "labelingTaskId": "task_m008_s03_live_high_cardinality",
+    "createdAt": 1712103420000,
+    "questions": [
+      {
+        "rev": 1,
+        "data": {
+          "id": "q_template_m008_s03_live_1",
+          "questionType": "single_choice_with_reasoning",
+          "questionText": "Does the answer provide a grounded justification?"
+        }
+      },
+      {
+        "rev": 1,
+        "data": {
+          "id": "q_template_m008_s03_live_2",
+          "questionType": "free_text",
+          "questionText": "Is the conclusion supported by the evidence?"
+        }
+      }
+    ],
+    "answers": {
+      "q_template_m008_s03_live_1": {
+        "verdictHint": "pass",
+        "evidence": "Grounded evidence block #18 cites the relevant source and constraint.",
+        "notes": "Primary verifier proof row for submission 18."
+      }
+    }
+  },
+  {
+    "id": "sub_m008_s03_19",
+    "queueId": "queue_m008_s03_live_high_cardinality",
+    "labelingTaskId": "task_m008_s03_live_high_cardinality",
+    "createdAt": 1712103480000,
+    "questions": [
+      {
+        "rev": 1,
+        "data": {
+          "id": "q_template_m008_s03_live_1",
+          "questionType": "single_choice_with_reasoning",
+          "questionText": "Does the answer provide a grounded justification?"
+        }
+      },
+      {
+        "rev": 1,
+        "data": {
+          "id": "q_template_m008_s03_live_2",
+          "questionType": "free_text",
+          "questionText": "Is the conclusion supported by the evidence?"
+        }
+      }
+    ],
+    "answers": {
+      "q_template_m008_s03_live_1": {
+        "verdictHint": "pass",
+        "evidence": "Grounded evidence block #19 cites the relevant source and constraint.",
+        "notes": "Primary verifier proof row for submission 19."
+      }
+    }
+  },
+  {
+    "id": "sub_m008_s03_20",
+    "queueId": "queue_m008_s03_live_high_cardinality",
+    "labelingTaskId": "task_m008_s03_live_high_cardinality",
+    "createdAt": 1712103540000,
+    "questions": [
+      {
+        "rev": 1,
+        "data": {
+          "id": "q_template_m008_s03_live_1",
+          "questionType": "single_choice_with_reasoning",
+          "questionText": "Does the answer provide a grounded justification?"
+        }
+      },
+      {
+        "rev": 1,
+        "data": {
+          "id": "q_template_m008_s03_live_2",
+          "questionType": "free_text",
+          "questionText": "Is the conclusion supported by the evidence?"
+        }
+      }
+    ],
+    "answers": {
+      "q_template_m008_s03_live_1": {
+        "verdictHint": "pass",
+        "evidence": "Grounded evidence block #20 cites the relevant source and constraint.",
+        "notes": "Primary verifier proof row for submission 20."
+      }
+    }
+  },
+  {
+    "id": "sub_m008_s03_21",
+    "queueId": "queue_m008_s03_live_high_cardinality",
+    "labelingTaskId": "task_m008_s03_live_high_cardinality",
+    "createdAt": 1712103600000,
+    "questions": [
+      {
+        "rev": 1,
+        "data": {
+          "id": "q_template_m008_s03_live_1",
+          "questionType": "single_choice_with_reasoning",
+          "questionText": "Does the answer provide a grounded justification?"
+        }
+      },
+      {
+        "rev": 1,
+        "data": {
+          "id": "q_template_m008_s03_live_2",
+          "questionType": "free_text",
+          "questionText": "Is the conclusion supported by the evidence?"
+        }
+      }
+    ],
+    "answers": {
+      "q_template_m008_s03_live_1": {
+        "verdictHint": "pass",
+        "evidence": "Grounded evidence block #21 cites the relevant source and constraint.",
+        "notes": "Primary verifier proof row for submission 21."
+      }
+    }
+  },
+  {
+    "id": "sub_m008_s03_22",
+    "queueId": "queue_m008_s03_live_high_cardinality",
+    "labelingTaskId": "task_m008_s03_live_high_cardinality",
+    "createdAt": 1712103660000,
+    "questions": [
+      {
+        "rev": 1,
+        "data": {
+          "id": "q_template_m008_s03_live_1",
+          "questionType": "single_choice_with_reasoning",
+          "questionText": "Does the answer provide a grounded justification?"
+        }
+      },
+      {
+        "rev": 1,
+        "data": {
+          "id": "q_template_m008_s03_live_2",
+          "questionType": "free_text",
+          "questionText": "Is the conclusion supported by the evidence?"
+        }
+      }
+    ],
+    "answers": {
+      "q_template_m008_s03_live_1": {
+        "verdictHint": "pass",
+        "evidence": "Grounded evidence block #22 cites the relevant source and constraint.",
+        "notes": "Primary verifier proof row for submission 22."
+      }
+    }
+  },
+  {
+    "id": "sub_m008_s03_23",
+    "queueId": "queue_m008_s03_live_high_cardinality",
+    "labelingTaskId": "task_m008_s03_live_high_cardinality",
+    "createdAt": 1712103720000,
+    "questions": [
+      {
+        "rev": 1,
+        "data": {
+          "id": "q_template_m008_s03_live_1",
+          "questionType": "single_choice_with_reasoning",
+          "questionText": "Does the answer provide a grounded justification?"
+        }
+      },
+      {
+        "rev": 1,
+        "data": {
+          "id": "q_template_m008_s03_live_2",
+          "questionType": "free_text",
+          "questionText": "Is the conclusion supported by the evidence?"
+        }
+      }
+    ],
+    "answers": {
+      "q_template_m008_s03_live_1": {
+        "verdictHint": "pass",
+        "evidence": "Grounded evidence block #23 cites the relevant source and constraint.",
+        "notes": "Primary verifier proof row for submission 23."
+      }
+    }
+  },
+  {
+    "id": "sub_m008_s03_24",
+    "queueId": "queue_m008_s03_live_high_cardinality",
+    "labelingTaskId": "task_m008_s03_live_high_cardinality",
+    "createdAt": 1712103780000,
+    "questions": [
+      {
+        "rev": 1,
+        "data": {
+          "id": "q_template_m008_s03_live_1",
+          "questionType": "single_choice_with_reasoning",
+          "questionText": "Does the answer provide a grounded justification?"
+        }
+      },
+      {
+        "rev": 1,
+        "data": {
+          "id": "q_template_m008_s03_live_2",
+          "questionType": "free_text",
+          "questionText": "Is the conclusion supported by the evidence?"
+        }
+      }
+    ],
+    "answers": {
+      "q_template_m008_s03_live_1": {
+        "verdictHint": "pass",
+        "evidence": "Grounded evidence block #24 cites the relevant source and constraint.",
+        "notes": "Primary verifier proof row for submission 24."
+      }
+    }
+  }
+]
