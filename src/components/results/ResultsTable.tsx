@@ -20,6 +20,7 @@ import Link from 'next/link';
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { useState } from 'react';
 import ReviewerTableSurface from '@/components/layout/ReviewerTableSurface';
+import { monoFontFamily } from '@/components/ui/theme';
 import { parsePlanMarker, type EvaluationPlanMarker } from '@/lib/ai/plan-marker';
 import ReviewerTimestamp from '@/lib/reviewer/reviewer-timestamp';
 import {
@@ -124,7 +125,7 @@ function AuditField({
       <Typography variant="caption" color="text.secondary" display="block">
         {label}
       </Typography>
-      <Typography variant="body2" fontFamily={monospace ? 'monospace' : undefined}>
+      <Typography variant="body2" fontFamily={monospace ? monoFontFamily : undefined}>
         {value}
       </Typography>
     </Box>
@@ -193,7 +194,7 @@ function ExpandableRow({
           >
             <Typography
               component="span"
-              fontFamily="monospace"
+              fontFamily={monoFontFamily}
               fontSize={12}
               sx={{
                 textDecoration: 'underline',
@@ -207,7 +208,7 @@ function ExpandableRow({
         </TableCell>
         <TableCell sx={{ verticalAlign: 'top', minWidth: 220 }}>
           <Stack spacing={0.5}>
-            <Typography component="span" fontFamily="monospace" fontSize={12} color="text.secondary">
+            <Typography component="span" fontFamily={monoFontFamily} fontSize={12} color="text.secondary">
               {evaluation.question.external_id}
             </Typography>
             <Typography component="span" fontSize={13}>
@@ -287,13 +288,20 @@ function ExpandableRow({
                   <Typography variant="caption" color="text.secondary" display="block" mb={0.5}>
                     Prompt snapshot
                   </Typography>
-                  <Paper variant="outlined" sx={{ p: 1, bgcolor: 'grey.50' }}>
+                  <Paper
+                    variant="outlined"
+                    sx={{
+                      p: 1.25,
+                      bgcolor: 'background.default',
+                      borderColor: 'divider',
+                    }}
+                  >
                     <Typography
                       component="pre"
                       variant="body2"
                       sx={{
                         m: 0,
-                        fontFamily: 'monospace',
+                        fontFamily: monoFontFamily,
                         whiteSpace: 'pre-wrap',
                         wordBreak: 'break-word',
                       }}

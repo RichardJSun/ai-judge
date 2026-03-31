@@ -1,9 +1,10 @@
 'use client';
 
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
-import { Breadcrumbs, Button, Stack, Typography } from '@mui/material';
+import { Box, Breadcrumbs, Button, Stack, Typography } from '@mui/material';
 import Link from 'next/link';
 import type { MouseEvent } from 'react';
+import { SectionSurface } from '@/components/ui/editorial';
 import { buildQueueSubmissionsHref } from '@/lib/queues/queue-submissions-page-url';
 import { buildQueueResultsHref } from '@/lib/results/results-page-url';
 
@@ -80,8 +81,8 @@ export function createSubmissionDetailBreadcrumbs(
 }
 
 export default function ReviewerWayfinding({
-    title,
-    backLabel,
+  title,
+  backLabel,
     backHref,
     onBack,
     breadcrumbs = [],
@@ -99,44 +100,56 @@ export default function ReviewerWayfinding({
     };
 
     return (
-        <Stack spacing={1.5} mb={3}>
-            {breadcrumbs.length > 0 ? (
-                <Breadcrumbs aria-label={`${title} breadcrumbs`}>
-                    {breadcrumbs.map((breadcrumb, index) => {
-                        const href = breadcrumb.href;
-                        const isCurrent = breadcrumb.current || index === breadcrumbs.length - 1 || !href;
+        <Box mb={3}>
+            <SectionSurface sx={{ p: { xs: 2, md: 2.5 } }}>
+                <Stack spacing={1.5}>
+                    {breadcrumbs.length > 0 ? (
+                        <Breadcrumbs aria-label={`${title} breadcrumbs`}>
+                            {breadcrumbs.map((breadcrumb, index) => {
+                                const href = breadcrumb.href;
+                                const isCurrent = breadcrumb.current || index === breadcrumbs.length - 1 || !href;
 
-                        return isCurrent ? (
-                            <Typography key={`${breadcrumb.label}-${index}`} variant="body2" color="text.primary">
-                                {breadcrumb.label}
-                            </Typography>
-                        ) : (
-                            <Link
-                                key={`${breadcrumb.label}-${index}`}
-                                href={href}
-                                style={{ color: 'inherit', textDecoration: 'underline' }}
+                                return isCurrent ? (
+                                    <Typography key={`${breadcrumb.label}-${index}`} variant="body2" color="text.primary">
+                                        {breadcrumb.label}
+                                    </Typography>
+                                ) : (
+                                    <Link
+                                        key={`${breadcrumb.label}-${index}`}
+                                        href={href}
+                                        style={{ color: 'inherit', textDecoration: 'underline' }}
+                                    >
+                                        {breadcrumb.label}
+                                    </Link>
+                                );
+                            })}
+                        </Breadcrumbs>
+                    ) : null}
+
+                    <Stack
+                        direction={{ xs: 'column', md: 'row' }}
+                        alignItems={{ xs: 'flex-start', md: 'center' }}
+                        justifyContent="space-between"
+                        spacing={1.25}
+                    >
+                        <Stack direction={{ xs: 'column', sm: 'row' }} alignItems={{ sm: 'center' }} spacing={1.25}>
+                            <Button
+                                startIcon={<ArrowBackIcon />}
+                                aria-label={backLabel}
+                                onClick={handleBackClick}
+                                component={backHref ? Link : 'button'}
+                                href={backHref}
+                                variant="outlined"
                             >
-                                {breadcrumb.label}
-                            </Link>
-                        );
-                    })}
-                </Breadcrumbs>
-            ) : null}
-
-            <Stack direction="row" alignItems="center" spacing={1}>
-                <Button
-                    startIcon={<ArrowBackIcon />}
-                    aria-label={backLabel}
-                    onClick={handleBackClick}
-                    component={backHref ? Link : 'button'}
-                    href={backHref}
-                >
-                    {backLabel}
-                </Button>
-                <Typography component="h1" variant="h4" fontWeight={700}>
-                    {title}
-                </Typography>
-            </Stack>
-        </Stack>
+                                {backLabel}
+                            </Button>
+                            <Typography component="h1" variant="h4" sx={{ overflowWrap: 'anywhere' }}>
+                                {title}
+                            </Typography>
+                        </Stack>
+                    </Stack>
+                </Stack>
+            </SectionSurface>
+        </Box>
     );
 }

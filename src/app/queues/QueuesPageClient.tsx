@@ -10,7 +10,6 @@ import {
   Button,
   Chip,
   CircularProgress,
-  Paper,
   Stack,
   Table,
   TableBody,
@@ -27,6 +26,7 @@ import { useCallback, useEffect } from 'react';
 import { z } from 'zod';
 import ReviewerTableSurface from '@/components/layout/ReviewerTableSurface';
 import ReviewerPagination from '@/components/pagination/ReviewerPagination';
+import { EmptyStatePanel, MetricCard, PageHeader } from '@/components/ui/editorial';
 import type { QueuePageResponse } from '@/types/api';
 
 const SAFE_QUEUES_ERROR = 'Failed to load queues.';
@@ -161,12 +161,21 @@ export function QueuesPageContent({
 }: QueuesPageContentProps) {
   const visibleStart = data && data.queues.length > 0 ? (data.page - 1) * data.pageSize + 1 : 0;
   const visibleEnd = data && data.queues.length > 0 ? visibleStart + data.queues.length - 1 : 0;
+  const pageSubmissionCount = data?.queues.reduce((sum, queue) => sum + queue.submission_count, 0) ?? 0;
+  const pageResultCount = data?.queues.reduce((sum, queue) => sum + queue.result_count, 0) ?? 0;
 
   return (
-    <>
-      <Typography variant="h4" fontWeight={700} mb={3}>
-        Queues
-      </Typography>
+    <Stack spacing={3}>
+      <PageHeader
+        eyebrow="Review desk"
+        title="Queues"
+        description="Browse uploaded queue batches, inspect submission counts, and move quickly into assignment, evaluation, or results."
+        actions={
+          <Button component={Link} href="/upload" variant="contained">
+            Upload
+          </Button>
+        }
+      />
 
       {isLoading ? (
         <Box display="flex" justifyContent="center" mt={6}>
@@ -184,16 +193,24 @@ export function QueuesPageContent({
           {error?.message ?? SAFE_QUEUES_ERROR}
         </Alert>
       ) : !data?.queues.length ? (
-        <Paper sx={{ p: 4, textAlign: 'center' }}>
-          <Typography color="text.secondary">
-            No queues yet. Upload a submission file to get started.
-          </Typography>
-          <Button component={Link} href="/upload" variant="contained" sx={{ mt: 2 }}>
-            Upload
-          </Button>
-        </Paper>
+        <EmptyStatePanel
+          title="No queues yet"
+          description="No queues yet. Upload a submission file to get started."
+          actions={
+            <Button component={Link} href="/upload" variant="contained">
+              Upload
+            </Button>
+          }
+        />
       ) : (
-        <Stack spacing={1.5}>
+        <Stack spacing={2}>
+          <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5}>
+            <MetricCard label="Visible page" value={data.page} hint={`${data.pageSize} rows per page`} />
+            <MetricCard label="Visible queues" value={data.queues.length} hint={`Showing ${visibleStart}-${visibleEnd} of ${data.total}`} />
+            <MetricCard label="Submissions on page" value={pageSubmissionCount} hint="Current page total" />
+            <MetricCard label="Results on page" value={pageResultCount} hint="Historical result rows available" />
+          </Stack>
+
           <Typography variant="body2" color="text.secondary">
             Showing {visibleStart}-{visibleEnd} of {data.total} queue{data.total === 1 ? '' : 's'}.
           </Typography>
@@ -203,10 +220,10 @@ export function QueuesPageContent({
               <TableHead>
                 <TableRow>
                   <TableCell sx={{ minWidth: 280 }}>Queue ID</TableCell>
-                  <TableCell align="center" sx={{ minWidth: 110 }}>
+                  <TableCell align="right" sx={{ minWidth: 110 }}>
                     Submissions
                   </TableCell>
-                  <TableCell align="center" sx={{ minWidth: 110 }}>
+                  <TableCell align="right" sx={{ minWidth: 110 }}>
                     Questions
                   </TableCell>
                   <TableCell sx={{ minWidth: 180, whiteSpace: 'nowrap' }}>Created</TableCell>
@@ -223,10 +240,10 @@ export function QueuesPageContent({
                         {queue.queue_id}
                       </Typography>
                     </TableCell>
-                    <TableCell align="center">
+                    <TableCell align="right">
                       <Chip label={queue.submission_count} size="small" />
                     </TableCell>
-                    <TableCell align="center">
+                    <TableCell align="right">
                       <Chip label={queue.question_count} size="small" />
                     </TableCell>
                     <TableCell sx={{ whiteSpace: 'nowrap' }}>{formatQueueCreatedAt(queue.created_at)}</TableCell>
@@ -281,7 +298,7 @@ export function QueuesPageContent({
           <ReviewerPagination page={data.page} pageSize={data.pageSize} total={data.total} getHref={getPageHref} />
         </Stack>
       )}
-    </>
+    </Stack>
   );
 }
 

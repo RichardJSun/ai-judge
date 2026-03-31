@@ -193,6 +193,49 @@ describe('handleGetQueues', () => {
     expect(getQueries(client, 'queues')[0]?.rangeArgs).toEqual([{ from: 0, to: 24 }]);
   });
 
+  it('returns an empty paged response instead of a safe failure when no queues exist yet', async () => {
+    const client = new FakeSupabaseClient({
+      queues: () => json([], null),
+    });
+
+    const response = await handleGetQueues(createRequest('http://localhost/api/queues?page=1'), {
+      createServiceClient: () => client as never,
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      queues: [],
+      total: 0,
+      page: 1,
+      pageSize: 25,
+    });
+    expect(getQueries(client, 'queues')[0]?.rangeArgs).toEqual([{ from: 0, to: 24 }]);
+  });
+
+  it('returns an empty paged response when Supabase reports the first page range as unsatisfiable for an empty table', async () => {
+    const client = new FakeSupabaseClient({
+      queues: [
+        () => rangeNotSatisfiable('An offset of 0 was requested, but there are only 0 rows.'),
+        () => json(null, null),
+      ],
+    });
+
+    const response = await handleGetQueues(createRequest('http://localhost/api/queues?page=1'), {
+      createServiceClient: () => client as never,
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      queues: [],
+      total: 0,
+      page: 1,
+      pageSize: 25,
+    });
+    const queueQueries = getQueries(client, 'queues');
+    expect(queueQueries[0]?.rangeArgs[0]).toEqual({ from: 0, to: 24 });
+    expect(queueQueries[1]?.rangeArgs).toEqual([]);
+  });
+
   it('clamps out-of-range pages to the last available page and recomputes metadata only for that page', async () => {
     const lastPageRows = [createQueueRow(26), createQueueRow(27)];
     const client = new FakeSupabaseClient({

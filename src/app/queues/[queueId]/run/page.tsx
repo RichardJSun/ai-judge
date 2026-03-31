@@ -2,7 +2,7 @@
 
 import BarChartIcon from '@mui/icons-material/BarChart';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
-import { Alert, Box, Button, CircularProgress, Paper, Typography } from '@mui/material';
+import { Alert, Box, Button, CircularProgress, Typography } from '@mui/material';
 import { useRouter } from 'next/navigation';
 import { use, useState, type ReactNode } from 'react';
 import ReviewerWayfinding, {
@@ -10,6 +10,7 @@ import ReviewerWayfinding, {
 } from '@/components/navigation/ReviewerWayfinding';
 import RunPreviewDialog from '@/components/run/RunPreviewDialog';
 import RunProgress from '@/components/run/RunProgress';
+import { EmptyStatePanel, SectionSurface } from '@/components/ui/editorial';
 import { useRunProgress } from '@/hooks/useRunProgress';
 import type { RunProgressResponse } from '@/types/api';
 
@@ -48,27 +49,20 @@ export function RunPageContent({
       />
 
       {!runId ? (
-        <Paper sx={{ p: 4, textAlign: 'center', maxWidth: 480, mx: 'auto' }}>
-          <Typography variant="h6" mb={1}>
-            Ready to evaluate?
-          </Typography>
-          <Typography color="text.secondary" mb={3}>
-            This will run all assigned judges against every submission in the queue.
-          </Typography>
-          <Button
-            variant="contained"
-            size="large"
-            startIcon={<PlayArrowIcon />}
-            onClick={onOpenDialog}
-          >
-            Run AI Judges
-          </Button>
-          {startError && (
-            <Alert severity="error" sx={{ mt: 2 }}>
-              {startError}
-            </Alert>
-          )}
-        </Paper>
+        <EmptyStatePanel
+          title="Ready to evaluate?"
+          description="This will run all assigned judges against every submission in the queue."
+          actions={
+            <Button
+              variant="contained"
+              size="large"
+              startIcon={<PlayArrowIcon />}
+              onClick={onOpenDialog}
+            >
+              Run AI Judges
+            </Button>
+          }
+        />
       ) : (
         <Box maxWidth={600}>
           {progress ? (
@@ -85,12 +79,23 @@ export function RunPageContent({
           ) : pollError ? (
             <Alert severity="error">{pollError}</Alert>
           ) : (
-            <Box display="flex" justifyContent="center" mt={6}>
-              <CircularProgress />
-            </Box>
+            <SectionSurface sx={{ p: 4 }}>
+              <Box display="flex" justifyContent="center" mt={2} mb={2}>
+                <CircularProgress />
+              </Box>
+              <Typography color="text.secondary" textAlign="center">
+                Waiting for the latest run state from the server.
+              </Typography>
+            </SectionSurface>
           )}
         </Box>
       )}
+
+      {!runId && startError ? (
+        <Alert severity="error" sx={{ mt: 2, maxWidth: 560, mx: 'auto' }}>
+          {startError}
+        </Alert>
+      ) : null}
 
       {runPreviewDialog}
     </>

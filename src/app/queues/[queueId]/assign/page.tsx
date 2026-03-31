@@ -7,6 +7,7 @@ import AssignmentMatrix from '@/components/assign/AssignmentMatrix';
 import ReviewerWayfinding, {
   createQueueReviewerBreadcrumbs,
 } from '@/components/navigation/ReviewerWayfinding';
+import { SectionSurface } from '@/components/ui/editorial';
 
 export const ASSIGN_PAGE_INTRO_COPY =
   'Check the boxes to assign judges to questions. Click a row to configure prompt fields.';
@@ -33,17 +34,19 @@ export function AssignPageContent({
         onBack={onBack}
         breadcrumbs={createQueueReviewerBreadcrumbs(queueId, 'Assign Judges')}
       />
-      <Typography variant="body2" color="text.secondary" mb={1}>
-        {ASSIGN_PAGE_INTRO_COPY}
-      </Typography>
-      <Alert severity="info" sx={{ mb: 2 }}>
-        <Typography variant="body2" color="inherit">
-          {ASSIGN_PAGE_ATTACHMENT_COPY}
+      <SectionSurface sx={{ p: { xs: 2, md: 2.5 }, mb: 2 }}>
+        <Typography variant="body2" color="text.secondary" mb={1}>
+          {ASSIGN_PAGE_INTRO_COPY}
         </Typography>
-        <Typography variant="body2" color="inherit" sx={{ mt: 0.5 }}>
-          Open a submission from Queue {queueId} to inspect attachment metadata and storage status.
-        </Typography>
-      </Alert>
+        <Alert severity="info">
+          <Typography variant="body2" color="inherit">
+            {ASSIGN_PAGE_ATTACHMENT_COPY}
+          </Typography>
+          <Typography variant="body2" color="inherit" sx={{ mt: 0.5 }}>
+            Open a submission from Queue {queueId} to inspect attachment metadata and storage status.
+          </Typography>
+        </Alert>
+      </SectionSurface>
       {assignmentMatrix}
     </>
   );

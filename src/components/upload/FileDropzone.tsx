@@ -3,6 +3,7 @@
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import { Alert, Box, CircularProgress, Paper, Typography } from '@mui/material';
 import { useRef, useState } from 'react';
+import { editorialRadius } from '@/components/ui/theme';
 import type { UploadResult } from '@/types/api';
 
 interface FileDropzoneProps {
@@ -71,11 +72,16 @@ export default function FileDropzone({ onSuccess }: FileDropzoneProps) {
         sx={{
           border: '2px dashed',
           borderColor: dragging ? 'primary.main' : 'divider',
-          borderRadius: 2,
-          p: 6,
+          borderRadius: `${editorialRadius.surface}px`,
+          p: { xs: 4, md: 6 },
           textAlign: 'center',
           cursor: loading ? 'not-allowed' : 'pointer',
           bgcolor: dragging ? 'action.hover' : 'background.paper',
+          backgroundImage:
+            'linear-gradient(150deg, color-mix(in srgb, var(--ai-judge-palette-primary-main) 12%, transparent), transparent 42%, color-mix(in srgb, var(--ai-judge-palette-secondary-main) 12%, transparent))',
+          boxShadow: dragging
+            ? '0 18px 40px color-mix(in srgb, var(--ai-judge-palette-primary-main) 20%, transparent)'
+            : 'none',
           transition:
             'transform 140ms cubic-bezier(0.23, 1, 0.32, 1), border-color 160ms ease, background-color 160ms ease, box-shadow 160ms ease',
           touchAction: 'manipulation',
@@ -108,9 +114,11 @@ export default function FileDropzone({ onSuccess }: FileDropzoneProps) {
           <CircularProgress />
         ) : (
           <>
-            <CloudUploadIcon aria-hidden="true" sx={{ fontSize: 48, color: 'text.secondary', mb: 1 }} />
-            <Typography variant="h6">Drop your JSON file here</Typography>
-            <Typography variant="body2" color="text.secondary">
+            <CloudUploadIcon aria-hidden="true" sx={{ fontSize: 52, color: 'primary.main', mb: 1 }} />
+            <Typography variant="h4" sx={{ fontSize: { xs: '1.75rem', md: '2.1rem' }, mb: 0.75 }}>
+              Drop your JSON file here
+            </Typography>
+            <Typography variant="body1" color="text.secondary">
               Click, press Enter, or drop a file to browse
             </Typography>
             <Typography variant="caption" color="text.secondary" display="block" mt={1}>

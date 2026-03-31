@@ -5,13 +5,14 @@ import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 import {
     Box,
     Button,
-    Chip,
     Divider,
     Paper,
     Stack,
     Typography,
 } from '@mui/material';
 import { useId, useState, type ReactNode } from 'react';
+import { StatusBadge } from '@/components/ui/editorial';
+import { monoFontFamily } from '@/components/ui/theme';
 import ReviewerTimestamp from '@/lib/reviewer/reviewer-timestamp';
 import type {
     SubmissionDetailAnswer,
@@ -87,7 +88,7 @@ function MetadataField({
             <Typography variant="caption" color="text.secondary" display="block">
                 {label}
             </Typography>
-            <Typography variant="body2" fontFamily={monospace ? 'monospace' : undefined}>
+            <Typography variant="body2" fontFamily={monospace ? monoFontFamily : undefined}>
                 {value}
             </Typography>
         </Box>
@@ -109,14 +110,14 @@ function SummaryStat({ label, value }: { label: string; value: number }) {
 
 function AnswerStateChip({ question }: { question: SubmissionDetailQuestion }) {
     if (question.answerState === 'missing') {
-        return <Chip label="Missing" color="warning" size="small" variant="outlined" />;
+        return <StatusBadge label="Missing" tone="warning" variant="outline" />;
     }
 
     if (question.answer === null) {
-        return <Chip label="Structured answer" color="info" size="small" variant="outlined" />;
+        return <StatusBadge label="Structured answer" tone="info" variant="outline" />;
     }
 
-    return <Chip label="Answered" color="success" size="small" variant="outlined" />;
+    return <StatusBadge label="Answered" tone="success" variant="outline" />;
 }
 
 function QuestionAnswer({ question }: { question: SubmissionDetailQuestion }) {
@@ -124,7 +125,7 @@ function QuestionAnswer({ question }: { question: SubmissionDetailQuestion }) {
 
     if (question.answerState === 'missing') {
         return (
-            <Typography variant="body2" color="warning.dark">
+            <Typography variant="body2" color="warning.main">
                 No answer was submitted for this question.
             </Typography>
         );
@@ -169,9 +170,9 @@ function RawPayloadDisclosure({ question }: { question: SubmissionDetailQuestion
                 <Paper
                     id={disclosureId}
                     variant="outlined"
-                    sx={{ mt: 1, p: 1.5, bgcolor: 'grey.50', overflowX: 'auto' }}
+                    sx={{ mt: 1, p: 1.5, bgcolor: 'background.default', overflowX: 'auto' }}
                 >
-                    <Typography component="pre" variant="body2" sx={{ m: 0, fontFamily: 'monospace' }}>
+                    <Typography component="pre" variant="body2" sx={{ m: 0, fontFamily: monoFontFamily }}>
                         {formatRawAnswer(question.rawAnswer)}
                     </Typography>
                 </Paper>
@@ -182,11 +183,16 @@ function RawPayloadDisclosure({ question }: { question: SubmissionDetailQuestion
 
 function AttachmentStatusChip({ attachment }: { attachment: SubmissionDetailAttachment }) {
     return (
-        <Chip
+        <StatusBadge
             label={getAttachmentStatusLabel(attachment.storage_status)}
-            color={getAttachmentStatusColor(attachment.storage_status)}
-            size="small"
-            variant="outlined"
+            tone={
+                getAttachmentStatusColor(attachment.storage_status) === 'success'
+                    ? 'success'
+                    : getAttachmentStatusColor(attachment.storage_status) === 'warning'
+                      ? 'warning'
+                      : 'danger'
+            }
+            variant="outline"
         />
     );
 }
@@ -276,8 +282,8 @@ function QuestionCard({ question, index }: { question: SubmissionDetailQuestion;
                 </Stack>
 
                 <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
-                    <Chip label={question.external_id} size="small" variant="outlined" sx={{ fontFamily: 'monospace' }} />
-                    {question.question_type ? <Chip label={question.question_type} size="small" variant="outlined" /> : null}
+                    <StatusBadge label={question.external_id} variant="outline" />
+                    {question.question_type ? <StatusBadge label={question.question_type} variant="outline" /> : null}
                 </Stack>
 
                 <Box>

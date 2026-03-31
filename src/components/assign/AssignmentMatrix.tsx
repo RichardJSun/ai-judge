@@ -23,6 +23,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Fragment, useMemo, useState } from 'react';
 import ReviewerTableSurface from '@/components/layout/ReviewerTableSurface';
+import { StatusBadge } from '@/components/ui/editorial';
 import {
   buildVisibleJudgeRoster,
   DEFAULT_PROMPT_FIELDS,
@@ -312,7 +313,7 @@ export function AssignmentMatrixTable({
                     <Typography fontSize={13} fontWeight={500}>
                       {judge.name}
                     </Typography>
-                    {!judge.active ? <Chip size="small" label="Inactive" /> : null}
+                    {!judge.active ? <StatusBadge label="Inactive" tone="neutral" /> : null}
                   </Stack>
                 </Tooltip>
               </TableCell>
@@ -341,13 +342,9 @@ export function AssignmentMatrixTable({
                       {question.external_id}
                     </Typography>
                     <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap mt={1}>
-                      <Chip size="small" label={`${questionAssignments.length} persisted`} />
+                      <StatusBadge label={`${questionAssignments.length} persisted`} />
                       {inactiveQuestionAssignments.length > 0 ? (
-                        <Chip
-                          size="small"
-                          color="warning"
-                          label={`${inactiveQuestionAssignments.length} inactive excluded`}
-                        />
+                        <StatusBadge label={`${inactiveQuestionAssignments.length} inactive excluded`} tone="warning" />
                       ) : null}
                     </Stack>
                   </TableCell>
@@ -438,31 +435,17 @@ export function AssignmentMatrixTable({
                                           </Typography>
                                         </Box>
                                         <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                                          <Chip
-                                            size="small"
-                                            color={
-                                              assignment.judge_status === 'active'
-                                                ? 'success'
-                                                : 'default'
-                                            }
+                                          <StatusBadge
+                                            tone={assignment.judge_status === 'active' ? 'success' : 'neutral'}
                                             label={
                                               assignment.judge_status === 'active'
                                                 ? 'Active in preview/run'
                                                 : 'Inactive — excluded from preview/run'
                                             }
                                           />
-                                          <Chip
-                                            size="small"
-                                            color={
-                                              assignment.attachment_forwarding
-                                                ? 'primary'
-                                                : 'default'
-                                            }
-                                            variant={
-                                              assignment.attachment_forwarding
-                                                ? 'filled'
-                                                : 'outlined'
-                                            }
+                                          <StatusBadge
+                                            tone={assignment.attachment_forwarding ? 'accent' : 'neutral'}
+                                            variant={assignment.attachment_forwarding ? 'soft' : 'outline'}
                                             label={formatForwardingState(
                                               assignment.attachment_forwarding
                                             )}

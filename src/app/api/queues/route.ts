@@ -44,7 +44,7 @@ async function fetchQueueTotal(supabase: ReturnType<typeof createServiceClient>)
     throw new Error('Failed to load queue count.');
   }
 
-  return count;
+  return typeof count === 'number' && Number.isSafeInteger(count) && count >= 0 ? count : 0;
 }
 
 function parseQueueRows(value: unknown, context: string): QueueRow[] {
@@ -200,6 +200,18 @@ async function runPagedQueueQuery(
     .range(page.from, page.to);
 }
 
+function resolvePagedQueueTotal(count: number | null | undefined, rows: QueueRow[] | null | undefined) {
+  if (typeof count === 'number' && Number.isSafeInteger(count) && count >= 0) {
+    return count;
+  }
+
+  if ((rows ?? []).length === 0) {
+    return 0;
+  }
+
+  throw new Error('Failed to resolve paged queue total.');
+}
+
 export async function handleGetQueues(request: NextRequest, deps: QueuesRouteDeps = defaultDeps) {
   try {
     const supabase = deps.createServiceClient();
@@ -230,13 +242,25 @@ export async function handleGetQueues(request: NextRequest, deps: QueuesRouteDep
       }
 
       resolvedPage = resolveListPage(requestedPage, await fetchQueueTotal(supabase));
+
+      if (resolvedPage.total === 0) {
+        const emptyResponse: QueuePageResponse = {
+          queues: [],
+          total: 0,
+          page: resolvedPage.page,
+          pageSize: resolvedPage.pageSize,
+        };
+
+        return NextResponse.json(emptyResponse);
+      }
+
       pagedResult = await runPagedQueueQuery(supabase, resolvedPage);
 
       if (pagedResult.error) {
         return NextResponse.json({ error: SAFE_QUEUES_ERROR }, { status: 500 });
       }
     } else {
-      resolvedPage = resolveListPage(requestedPage, pagedResult.count);
+      resolvedPage = resolveListPage(requestedPage, resolvePagedQueueTotal(pagedResult.count, pagedResult.data ?? []));
 
       if (resolvedPage.wasClamped && resolvedPage.total > 0) {
         pagedResult = await runPagedQueueQuery(supabase, resolvedPage);

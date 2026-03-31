@@ -26,7 +26,7 @@ async function fetchJudgeTotal(supabase: ReturnType<typeof createServiceClient>)
     throw new Error('Failed to load judge count.');
   }
 
-  return count;
+  return typeof count === 'number' && Number.isSafeInteger(count) && count >= 0 ? count : 0;
 }
 
 async function runPagedJudgeQuery(
@@ -38,6 +38,18 @@ async function runPagedJudgeQuery(
     .select('*', { count: 'exact' })
     .order('created_at', { ascending: false })
     .range(page.from, page.to);
+}
+
+function resolvePagedJudgeTotal(count: number | null | undefined, rows: unknown[] | null | undefined) {
+  if (typeof count === 'number' && Number.isSafeInteger(count) && count >= 0) {
+    return count;
+  }
+
+  if ((rows ?? []).length === 0) {
+    return 0;
+  }
+
+  throw new Error('Failed to resolve paged judge total.');
 }
 
 export async function handleGetJudges(request: NextRequest, deps: JudgesRouteDeps = defaultDeps) {
@@ -69,13 +81,25 @@ export async function handleGetJudges(request: NextRequest, deps: JudgesRouteDep
       }
 
       resolvedPage = resolveListPage(requestedPage, await fetchJudgeTotal(supabase));
+
+      if (resolvedPage.total === 0) {
+        const emptyResponse: JudgePageResponse = {
+          judges: [],
+          total: 0,
+          page: resolvedPage.page,
+          pageSize: resolvedPage.pageSize,
+        };
+
+        return NextResponse.json(emptyResponse);
+      }
+
       pagedResult = await runPagedJudgeQuery(supabase, resolvedPage);
 
       if (pagedResult.error) {
         return NextResponse.json({ error: SAFE_JUDGES_ERROR }, { status: 500 });
       }
     } else {
-      resolvedPage = resolveListPage(requestedPage, pagedResult.count);
+      resolvedPage = resolveListPage(requestedPage, resolvePagedJudgeTotal(pagedResult.count, pagedResult.data ?? []));
 
       if (resolvedPage.wasClamped && resolvedPage.total > 0) {
         pagedResult = await runPagedJudgeQuery(supabase, resolvedPage);

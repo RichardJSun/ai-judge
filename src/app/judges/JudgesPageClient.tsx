@@ -6,7 +6,6 @@ import {
     Alert,
     Box,
     Button,
-    Chip,
     CircularProgress,
     Dialog,
     DialogContent,
@@ -26,6 +25,7 @@ import { z } from 'zod';
 import JudgeForm from '@/components/judges/JudgeForm';
 import ReviewerTableSurface from '@/components/layout/ReviewerTableSurface';
 import ReviewerPagination from '@/components/pagination/ReviewerPagination';
+import { EmptyStatePanel, MetricCard, PageHeader, SectionSurface, StatusBadge } from '@/components/ui/editorial';
 import { parseJudgeRecord, JudgeRecordSchema } from '@/lib/judges/judge-lifecycle';
 import { getJudgePageQueryKey, reconcileSavedJudgeCaches } from '@/lib/judges/judge-query-cache';
 import type { JudgePageResponse } from '@/types/api';
@@ -233,22 +233,21 @@ export function JudgesPageContent({
 }: JudgesPageContentProps) {
     const visibleStart = data && data.judges.length > 0 ? (data.page - 1) * data.pageSize + 1 : 0;
     const visibleEnd = data && data.judges.length > 0 ? visibleStart + data.judges.length - 1 : 0;
+    const activeCount = data?.judges.filter((judge) => judge.active).length ?? 0;
+    const inactiveCount = data?.judges.filter((judge) => !judge.active).length ?? 0;
 
     return (
         <Stack spacing={3}>
-            <Stack direction="row" alignItems="center" justifyContent="space-between" gap={2} flexWrap="wrap">
-                <Box>
-                    <Typography variant="h4" fontWeight={700}>
-                        Judges
-                    </Typography>
-                    <Typography color="text.secondary" sx={{ mt: 0.5 }}>
-                        Manage persisted judge configurations. Inactive judges stay in history and can be reactivated later.
-                    </Typography>
-                </Box>
-                <Button variant="contained" startIcon={<AddIcon />} onClick={onOpenCreate}>
-                    New Judge
-                </Button>
-            </Stack>
+            <PageHeader
+                eyebrow="Configuration"
+                title="Judges"
+                description="Manage persisted judge configurations. Inactive judges stay in history and can be reactivated later."
+                actions={
+                    <Button variant="contained" startIcon={<AddIcon />} onClick={onOpenCreate}>
+                        New Judge
+                    </Button>
+                }
+            />
 
             {statusMessage ? <Alert severity="success">{statusMessage}</Alert> : null}
 
@@ -268,74 +267,81 @@ export function JudgesPageContent({
                     {error?.message ?? SAFE_JUDGES_ERROR}
                 </Alert>
             ) : !data?.judges.length ? (
-                <ReviewerTableSurface>
-                    <Box sx={{ p: 4, textAlign: 'center' }}>
-                        <Typography color="text.secondary">No judges yet. Create one to start evaluating submissions.</Typography>
-                        <Button variant="contained" startIcon={<AddIcon />} sx={{ mt: 2 }} onClick={onOpenCreate}>
+                <EmptyStatePanel
+                    title="No judges yet"
+                    description="No judges yet. Create one to start evaluating submissions."
+                    actions={
+                        <Button variant="contained" startIcon={<AddIcon />} onClick={onOpenCreate}>
                             New Judge
                         </Button>
-                    </Box>
-                </ReviewerTableSurface>
+                    }
+                />
             ) : (
-                <Stack spacing={1.5}>
+                <Stack spacing={2}>
+                    <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5}>
+                        <MetricCard label="Visible page" value={data.page} hint={`${data.pageSize} rows per page`} />
+                        <MetricCard label="Visible judges" value={data.judges.length} hint={`Showing ${visibleStart}-${visibleEnd} of ${data.total}`} />
+                        <MetricCard label="Active on page" value={activeCount} hint={`${inactiveCount} inactive`} />
+                    </Stack>
+
                     <Typography variant="body2" color="text.secondary">
                         Showing {visibleStart}-{visibleEnd} of {data.total} judge{data.total === 1 ? '' : 's'}.
                     </Typography>
 
-                    <ReviewerTableSurface>
-                        <Table sx={{ minWidth: 940 }}>
-                            <TableHead>
-                                <TableRow>
-                                    <TableCell>Name</TableCell>
-                                    <TableCell>Model</TableCell>
-                                    <TableCell>Status</TableCell>
-                                    <TableCell>Updated</TableCell>
-                                    <TableCell align="right">Actions</TableCell>
-                                </TableRow>
-                            </TableHead>
-                            <TableBody>
-                                {data.judges.map((judge) => (
-                                    <TableRow key={judge.id} hover sx={{ opacity: judge.active ? 1 : 0.72 }}>
-                                        <TableCell>
-                                            <Typography fontWeight={500}>{judge.name}</Typography>
-                                        </TableCell>
-                                        <TableCell>
-                                            <Typography fontFamily="monospace" fontSize={13}>
-                                                {judge.model}
-                                            </Typography>
-                                        </TableCell>
-                                        <TableCell>
-                                            <Stack spacing={0.5}>
-                                                <Chip
-                                                    label={judge.active ? 'Active' : 'Inactive'}
-                                                    color={judge.active ? 'success' : 'default'}
-                                                    size="small"
-                                                    sx={{ width: 'fit-content' }}
-                                                />
-                                                <Typography variant="body2" color="text.secondary">
-                                                    {judge.active
-                                                        ? 'Eligible for assignments and runs.'
-                                                        : 'Retained for history. Reactivate to use again.'}
-                                                </Typography>
-                                            </Stack>
-                                        </TableCell>
-                                        <TableCell>{formatJudgeUpdatedAt(judge.updated_at)}</TableCell>
-                                        <TableCell align="right">
-                                            <Button
-                                                type="button"
-                                                size="small"
-                                                startIcon={<EditIcon />}
-                                                onClick={() => onManageJudge(judge)}
-                                                aria-haspopup="dialog"
-                                            >
-                                                Manage
-                                            </Button>
-                                        </TableCell>
+                    <SectionSurface sx={{ p: { xs: 1, md: 1.25 } }}>
+                        <ReviewerTableSurface>
+                            <Table sx={{ minWidth: 940 }}>
+                                <TableHead>
+                                    <TableRow>
+                                        <TableCell>Name</TableCell>
+                                        <TableCell>Model</TableCell>
+                                        <TableCell>Status</TableCell>
+                                        <TableCell>Updated</TableCell>
+                                        <TableCell align="right">Actions</TableCell>
                                     </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                    </ReviewerTableSurface>
+                                </TableHead>
+                                <TableBody>
+                                    {data.judges.map((judge) => (
+                                        <TableRow key={judge.id} hover sx={{ opacity: judge.active ? 1 : 0.72 }}>
+                                            <TableCell>
+                                                <Typography fontWeight={500}>{judge.name}</Typography>
+                                            </TableCell>
+                                            <TableCell>
+                                                <Typography fontFamily="monospace" fontSize={13}>
+                                                    {judge.model}
+                                                </Typography>
+                                            </TableCell>
+                                            <TableCell>
+                                                <Stack spacing={0.5}>
+                                                    <StatusBadge
+                                                        label={judge.active ? 'Active' : 'Inactive'}
+                                                        tone={judge.active ? 'success' : 'neutral'}
+                                                    />
+                                                    <Typography variant="body2" color="text.secondary">
+                                                        {judge.active
+                                                            ? 'Eligible for assignments and runs.'
+                                                            : 'Retained for history. Reactivate to use again.'}
+                                                    </Typography>
+                                                </Stack>
+                                            </TableCell>
+                                            <TableCell>{formatJudgeUpdatedAt(judge.updated_at)}</TableCell>
+                                            <TableCell align="right">
+                                                <Button
+                                                    type="button"
+                                                    size="small"
+                                                    startIcon={<EditIcon />}
+                                                    onClick={() => onManageJudge(judge)}
+                                                    aria-haspopup="dialog"
+                                                >
+                                                    Manage
+                                                </Button>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </ReviewerTableSurface>
+                    </SectionSurface>
 
                     <ReviewerPagination page={data.page} pageSize={data.pageSize} total={data.total} getHref={getPageHref} />
                 </Stack>

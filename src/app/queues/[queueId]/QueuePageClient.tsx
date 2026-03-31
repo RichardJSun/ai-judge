@@ -8,7 +8,6 @@ import {
     Box,
     Button,
     CircularProgress,
-    Paper,
     Stack,
     Table,
     TableBody,
@@ -26,6 +25,7 @@ import ReviewerWayfinding, {
     createQueueReviewerBreadcrumbs,
 } from '@/components/navigation/ReviewerWayfinding';
 import ReviewerPagination from '@/components/pagination/ReviewerPagination';
+import { EmptyStatePanel, MetricCard, SectionSurface } from '@/components/ui/editorial';
 import ReviewerTimestamp from '@/lib/reviewer/reviewer-timestamp';
 import {
     buildQueueSubmissionDetailHref,
@@ -139,52 +139,61 @@ export function QueuePageContent({
                     {loadError.message}
                 </Alert>
             ) : !data?.submissions.length ? (
-                <Paper sx={{ p: 4, textAlign: 'center' }}>
-                    <Typography color="text.secondary">No submissions in this queue.</Typography>
-                </Paper>
+                <EmptyStatePanel
+                    title="No submissions in this queue"
+                    description="No submissions in this queue."
+                />
             ) : (
-                <Stack spacing={1.5}>
+                <Stack spacing={2}>
+                    <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5}>
+                        <MetricCard label="Queue" value={queueId} hint="Current reviewer scope" />
+                        <MetricCard label="Visible page" value={page} hint={`${data.pageSize} rows per page`} />
+                        <MetricCard label="Visible submissions" value={data.submissions.length} hint={`${data.total} total in queue`} />
+                    </Stack>
+
                     <Typography variant="body2" color="text.secondary">
                         {getQueueSubmissionsVisibleRangeText(data)}
                     </Typography>
 
-                    <ReviewerTableSurface>
-                        <Table sx={{ minWidth: 760 }}>
-                            <TableHead>
-                                <TableRow>
-                                    <TableCell sx={{ minWidth: 260 }}>ID</TableCell>
-                                    <TableCell sx={{ minWidth: 220 }}>Task ID</TableCell>
-                                    <TableCell sx={{ minWidth: 220, whiteSpace: 'nowrap' }}>Submitted</TableCell>
-                                </TableRow>
-                            </TableHead>
-                            <TableBody>
-                                {data.submissions.map((submission) => (
-                                    <TableRow key={submission.id} hover>
-                                        <TableCell>
-                                            <Link
-                                                href={resolvedSubmissionHref(submission.id)}
-                                                prefetch={false}
-                                                aria-label={`Open submission ${submission.external_id}`}
-                                                style={{ color: 'inherit', display: 'inline-block', textDecoration: 'none' }}
-                                            >
-                                                <Typography
-                                                    fontFamily="monospace"
-                                                    fontSize={13}
-                                                    sx={{ textDecoration: 'underline', textDecorationColor: 'divider', whiteSpace: 'nowrap' }}
-                                                >
-                                                    {submission.external_id}
-                                                </Typography>
-                                            </Link>
-                                        </TableCell>
-                                        <TableCell sx={{ whiteSpace: 'nowrap' }}>{submission.labeling_task_id ?? '—'}</TableCell>
-                                        <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                                            <ReviewerTimestamp value={submission.submitted_at} />
-                                        </TableCell>
+                    <SectionSurface sx={{ p: { xs: 1, md: 1.25 } }}>
+                        <ReviewerTableSurface>
+                            <Table sx={{ minWidth: 760 }}>
+                                <TableHead>
+                                    <TableRow>
+                                        <TableCell sx={{ minWidth: 260 }}>ID</TableCell>
+                                        <TableCell sx={{ minWidth: 220 }}>Task ID</TableCell>
+                                        <TableCell sx={{ minWidth: 220, whiteSpace: 'nowrap' }}>Submitted</TableCell>
                                     </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                    </ReviewerTableSurface>
+                                </TableHead>
+                                <TableBody>
+                                    {data.submissions.map((submission) => (
+                                        <TableRow key={submission.id} hover>
+                                            <TableCell>
+                                                <Link
+                                                    href={resolvedSubmissionHref(submission.id)}
+                                                    prefetch={false}
+                                                    aria-label={`Open submission ${submission.external_id}`}
+                                                    style={{ color: 'inherit', display: 'inline-block', textDecoration: 'none' }}
+                                                >
+                                                    <Typography
+                                                        fontFamily="monospace"
+                                                        fontSize={13}
+                                                        sx={{ textDecoration: 'underline', textDecorationColor: 'divider', whiteSpace: 'nowrap' }}
+                                                    >
+                                                        {submission.external_id}
+                                                    </Typography>
+                                                </Link>
+                                            </TableCell>
+                                            <TableCell sx={{ whiteSpace: 'nowrap' }}>{submission.labeling_task_id ?? '—'}</TableCell>
+                                            <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                                                <ReviewerTimestamp value={submission.submitted_at} />
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </ReviewerTableSurface>
+                    </SectionSurface>
 
                     <Box>
                         <ReviewerPagination

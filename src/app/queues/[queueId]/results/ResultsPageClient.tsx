@@ -6,7 +6,6 @@ import {
   Button,
   CircularProgress,
   Divider,
-  Paper,
   Stack,
   Typography,
 } from '@mui/material';
@@ -20,6 +19,7 @@ import ReviewerPagination from '@/components/pagination/ReviewerPagination';
 import PassRateChart from '@/components/results/PassRateChart';
 import ResultsFilters from '@/components/results/ResultsFilters';
 import ResultsTable from '@/components/results/ResultsTable';
+import { MetricCard, SectionSurface } from '@/components/ui/editorial';
 import { fetchJson, parseResultsResponse } from '@/lib/results/fetch-json';
 import {
   buildResultsPageHref,
@@ -192,7 +192,13 @@ export function ResultsPageContent({
         </Alert>
       ) : results ? (
         <>
-          <Paper sx={{ p: 2, mb: 2 }}>
+          <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} mb={2}>
+            <MetricCard label="Pass rate" value={`${results.passRate}%`} hint="Completed evaluations only" />
+            <MetricCard label="Matching evaluations" value={results.total} hint="Current filter set" />
+            <MetricCard label="Completed evaluations" value={completedEvaluations} hint="Included in the chart" />
+          </Stack>
+
+          <SectionSurface sx={{ p: { xs: 2, md: 2.5 }, mb: 2 }}>
             <Stack direction={{ xs: 'column', md: 'row' }} spacing={3} alignItems={{ md: 'stretch' }}>
               <Box minWidth={{ xs: '100%', md: 220 }}>
                 <Typography variant="h3" fontWeight={800} color="primary.main">
@@ -214,7 +220,7 @@ export function ResultsPageContent({
                 />
               </Box>
             </Stack>
-          </Paper>
+          </SectionSurface>
 
           <ResultsTable
             queueId={queueId}

@@ -116,7 +116,16 @@ export default function RunPreviewDialog({
               </Alert>
             ) : null}
             {preview?.breakdown && (
-              <List dense>
+              <List
+                dense
+                sx={{
+                  border: '1px solid',
+                  borderColor: 'divider',
+                  borderRadius: '12px',
+                  bgcolor: 'background.default',
+                  px: 1,
+                }}
+              >
                 {preview.breakdown.map((item, index) => {
                   const secondary = [`${item.judgeCount} active judge${item.judgeCount !== 1 ? 's' : ''} assigned`];
                   if (item.excludedInactiveJudgeCount) {

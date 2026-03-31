@@ -8,11 +8,11 @@ import {
   Box,
   Chip,
   LinearProgress,
-  Paper,
   Stack,
   Typography,
 } from '@mui/material';
 import type { AlertColor, ChipProps, LinearProgressProps } from '@mui/material';
+import { InlineStat, SectionSurface } from '@/components/ui/editorial';
 import type { RunProgressResponse } from '@/types/api';
 import type { RunStatusEnum } from '@/types/db';
 
@@ -144,7 +144,7 @@ export default function RunProgress({ progress }: RunProgressProps) {
   const errorCountColor = presentation.progressColor === 'error' ? 'error.main' : errored > 0 ? 'warning.main' : 'text.primary';
 
   return (
-    <Paper sx={{ p: 3 }}>
+    <SectionSurface sx={{ p: { xs: 2.5, md: 3 } }}>
       <Stack direction="row" alignItems="center" spacing={1} mb={2}>
         {presentation.icon === 'success' && <CheckCircleIcon color="success" />}
         {presentation.icon === 'warning' && <WarningAmberIcon color="warning" />}
@@ -157,28 +157,21 @@ export default function RunProgress({ progress }: RunProgressProps) {
         value={pct}
         valueBuffer={pct}
         color={presentation.progressColor}
-        sx={{ height: 8, borderRadius: 4, mb: 2 }}
+        sx={{ height: 10, borderRadius: 999, mb: 2.5 }}
       />
 
       <Stack direction="row" spacing={2} alignItems="flex-start" flexWrap="wrap" useFlexGap>
-        <Box>
-          <Typography variant="caption" color="text.secondary">Total</Typography>
-          <Typography fontWeight={700}>{total}</Typography>
-        </Box>
-        <Box>
-          <Typography variant="caption" color="text.secondary">Completed</Typography>
-          <Typography fontWeight={700} color="success.main">{completed}</Typography>
-        </Box>
-        <Box>
-          <Typography variant="caption" color="text.secondary">Errors</Typography>
-          <Typography fontWeight={700} color={errorCountColor}>
-            {errored}
-          </Typography>
-        </Box>
-        <Box>
-          <Typography variant="caption" color="text.secondary">Progress</Typography>
-          <Typography fontWeight={700}>{pct}%</Typography>
-        </Box>
+        <InlineStat label="Total" value={total} />
+        <InlineStat label="Completed" value={<Typography component="span" fontWeight={700} color="success.main">{completed}</Typography>} />
+        <InlineStat
+          label="Errors"
+          value={
+            <Typography component="span" fontWeight={700} color={errorCountColor}>
+              {errored}
+            </Typography>
+          }
+        />
+        <InlineStat label="Progress" value={`${pct}%`} />
         <Box>
           <Chip label={presentation.chipLabel} size="small" color={presentation.chipColor} />
         </Box>
@@ -189,6 +182,6 @@ export default function RunProgress({ progress }: RunProgressProps) {
           {presentation.alertMessage}
         </Alert>
       )}
-    </Paper>
+    </SectionSurface>
   );
 }

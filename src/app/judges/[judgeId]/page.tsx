@@ -5,17 +5,15 @@ import {
   Alert,
   Box,
   Button,
-  Chip,
   CircularProgress,
-  Paper,
   Stack,
-  Typography,
 } from '@mui/material';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { use, type ReactNode, useState } from 'react';
 import { buildJudgeSaveSuccessMessage, persistJudgeUpdate } from '../JudgesPageClient';
 import JudgeForm from '@/components/judges/JudgeForm';
+import { PageHeader, SectionSurface, StatusBadge } from '@/components/ui/editorial';
 import { parseJudgeRecord } from '@/lib/judges/judge-lifecycle';
 import { reconcileSavedJudgeCaches } from '@/lib/judges/judge-query-cache';
 import type { Judge } from '@/types/db';
@@ -117,15 +115,19 @@ export function EditJudgePageContent({
 
   return (
     <Stack spacing={3}>
-      <Stack direction="row" alignItems="center" gap={2} flexWrap="wrap">
-        <Button startIcon={<ArrowBackIcon />} onClick={onBack}>
-          Judges
-        </Button>
-        <Typography variant="h5" fontWeight={700}>
-          {judge.name}
-        </Typography>
-        <Chip label={judge.active ? 'Active' : 'Inactive'} color={judge.active ? 'success' : 'default'} size="small" />
-      </Stack>
+      <PageHeader
+        eyebrow="Judge detail"
+        title={judge.name}
+        description="Adjust the judge prompt, model, and activation state without changing its identity."
+        actions={
+          <>
+            <StatusBadge label={judge.active ? 'Active' : 'Inactive'} tone={judge.active ? 'success' : 'neutral'} />
+            <Button startIcon={<ArrowBackIcon />} onClick={onBack} variant="outlined">
+              Judges
+            </Button>
+          </>
+        }
+      />
 
       <Alert severity={judge.active ? 'info' : 'warning'}>
         {judge.active
@@ -136,9 +138,9 @@ export function EditJudgePageContent({
       {statusMessage ? <Alert severity="success">{statusMessage}</Alert> : null}
       {saveError ? <Alert severity="error">{saveError.message}</Alert> : null}
 
-      <Paper sx={{ p: 3, maxWidth: 720 }}>
+      <SectionSurface sx={{ p: 3, maxWidth: 720 }}>
         <JudgeForm initial={judge} onSave={onSave} onCancel={onBack} submitLabel="Save Changes" />
-      </Paper>
+      </SectionSurface>
     </Stack>
   );
 }

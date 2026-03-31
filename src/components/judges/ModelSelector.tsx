@@ -15,6 +15,7 @@ export default function ModelSelector({ value, onChange, error, helperText }: Mo
     <Autocomplete
       freeSolo
       options={[...SUPPORTED_MODELS]}
+      fullWidth
       value={value}
       onInputChange={(_, newValue) => onChange(newValue)}
       onChange={(_, newValue) => onChange(newValue ?? '')}

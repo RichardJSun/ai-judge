@@ -11,6 +11,7 @@ import {
   Typography,
 } from '@mui/material';
 import { useEffect, useMemo, useState } from 'react';
+import { ActionCluster } from '@/components/ui/editorial';
 import ModelSelector from './ModelSelector';
 import type { Judge } from '@/types/db';
 
@@ -70,6 +71,9 @@ export default function JudgeForm({ initial, onSave, onCancel, submitLabel }: Ju
   return (
     <Box component="form" onSubmit={handleSubmit}>
       <Stack spacing={2}>
+        <Typography variant="body2" color="text.secondary">
+          Persisted judges can be reused across queue runs. Keep the name specific and the rubric precise enough to explain pass, fail, and inconclusive behavior.
+        </Typography>
         {error ? <Alert severity="error">{error}</Alert> : null}
         <Alert severity={active ? 'info' : 'warning'}>
           {active
@@ -99,18 +103,18 @@ export default function JudgeForm({ initial, onSave, onCancel, submitLabel }: Ju
           }
         />
         <Box>
-          <ModelSelector value={model} onChange={setModel} />
-          {!trimmedModel && model.length > 0 ? (
-            <Typography variant="body2" color="error.main" sx={{ mt: 1 }}>
-              Model cannot be blank.
-            </Typography>
-          ) : null}
+          <ModelSelector
+            value={model}
+            onChange={setModel}
+            error={!trimmedModel && model.length > 0}
+            helperText={!trimmedModel && model.length > 0 ? 'Model cannot be blank.' : undefined}
+          />
         </Box>
         <FormControlLabel
           control={<Switch checked={active} onChange={(e) => setActive(e.target.checked)} />}
           label={active ? 'Judge is active' : 'Judge is inactive'}
         />
-        <Stack direction="row" spacing={1}>
+        <ActionCluster sx={{ justifyContent: 'flex-start' }}>
           <Button type="submit" variant="contained" disabled={submitDisabled}>
             {saving ? 'Saving…' : submitLabel ?? (initial?.id ? 'Save Changes' : 'Save Judge')}
           </Button>
@@ -119,7 +123,7 @@ export default function JudgeForm({ initial, onSave, onCancel, submitLabel }: Ju
               Cancel
             </Button>
           ) : null}
-        </Stack>
+        </ActionCluster>
       </Stack>
     </Box>
   );

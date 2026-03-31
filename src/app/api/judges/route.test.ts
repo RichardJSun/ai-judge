@@ -136,6 +136,49 @@ describe('handleGetJudges', () => {
     expect(getQueries(client, 'judges')[0]?.rangeArgs).toEqual([{ from: 0, to: 24 }]);
   });
 
+  it('returns an empty paged response instead of a safe failure when no judges exist yet', async () => {
+    const client = new FakeSupabaseClient({
+      judges: () => json([], null),
+    });
+
+    const response = await handleGetJudges(createRequest('http://localhost/api/judges?page=1'), {
+      createServiceClient: () => client as never,
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      judges: [],
+      total: 0,
+      page: 1,
+      pageSize: 25,
+    });
+    expect(getQueries(client, 'judges')[0]?.rangeArgs).toEqual([{ from: 0, to: 24 }]);
+  });
+
+  it('returns an empty paged response when Supabase reports the first page range as unsatisfiable for an empty table', async () => {
+    const client = new FakeSupabaseClient({
+      judges: [
+        () => rangeNotSatisfiable('An offset of 0 was requested, but there are only 0 rows.'),
+        () => json(null, null),
+      ],
+    });
+
+    const response = await handleGetJudges(createRequest('http://localhost/api/judges?page=1'), {
+      createServiceClient: () => client as never,
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      judges: [],
+      total: 0,
+      page: 1,
+      pageSize: 25,
+    });
+    const judgeQueries = getQueries(client, 'judges');
+    expect(judgeQueries[0]?.rangeArgs[0]).toEqual({ from: 0, to: 24 });
+    expect(judgeQueries[1]?.rangeArgs).toEqual([]);
+  });
+
   it('clamps out-of-range pages to the last available page', async () => {
     const lastPageRows = [createJudgeRow(26), createJudgeRow(27)];
     const client = new FakeSupabaseClient({

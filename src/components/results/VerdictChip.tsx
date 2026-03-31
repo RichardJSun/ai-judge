@@ -1,6 +1,6 @@
 'use client';
 
-import { Chip } from '@mui/material';
+import { Box, Typography } from '@mui/material';
 import type { ChipProps } from '@mui/material';
 import type { EvalStatusEnum, VerdictEnum } from '@/types/db';
 
@@ -55,5 +55,71 @@ export function resolveVerdictChipPresentation({ verdict, status }: VerdictChipP
 
 export default function VerdictChip(props: VerdictChipProps) {
   const { label, color, variant } = resolveVerdictChipPresentation(props);
-  return <Chip label={label} size="small" color={color} variant={variant} />;
+
+  return (
+    <Box
+      component="span"
+      sx={(theme) => {
+        const varsPalette = theme.vars?.palette;
+        const defaultPaper = varsPalette?.background.paper ?? theme.palette.background.paper;
+        const defaultText = varsPalette?.text.secondary ?? theme.palette.text.secondary;
+        const accent =
+          color === 'default'
+            ? defaultText
+            : (varsPalette?.[color]?.main ?? theme.palette[color].main);
+        const backgroundColor =
+          variant === 'outlined'
+            ? `color-mix(in srgb, ${defaultPaper} 92%, ${accent} 8%)`
+            : `color-mix(in srgb, ${accent} 14%, ${defaultPaper})`;
+        const borderColor =
+          variant === 'outlined'
+            ? `color-mix(in srgb, ${accent} 34%, ${defaultPaper})`
+            : `color-mix(in srgb, ${accent} 22%, ${defaultPaper})`;
+
+        return {
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 0.9,
+          minWidth: 92,
+          px: 1.15,
+          py: 0.55,
+          borderRadius: '10px',
+          justifyContent: 'center',
+          border: '1px solid',
+          fontVariantNumeric: 'tabular-nums',
+          color: accent,
+          backgroundColor,
+          borderColor,
+          boxShadow:
+            variant === 'outlined'
+              ? 'none'
+              : `inset 0 1px 0 color-mix(in srgb, ${defaultPaper} 72%, transparent)`,
+        };
+      }}
+    >
+      <Box
+        component="span"
+        aria-hidden="true"
+        sx={{
+          width: 8,
+          height: 8,
+          borderRadius: '999px',
+          backgroundColor: 'currentColor',
+          flexShrink: 0,
+        }}
+      />
+      <Typography
+        component="span"
+        variant="caption"
+        sx={{
+          fontWeight: 800,
+          letterSpacing: '0.03em',
+          lineHeight: 1,
+          textTransform: 'uppercase',
+        }}
+      >
+        {label}
+      </Typography>
+    </Box>
+  );
 }

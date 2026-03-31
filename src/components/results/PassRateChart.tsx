@@ -1,6 +1,7 @@
 'use client';
 
 import { Box, Typography } from '@mui/material';
+import { useTheme } from '@mui/material/styles';
 import {
   Bar,
   BarChart,
@@ -25,6 +26,14 @@ interface PassRateChartProps {
 }
 
 export default function PassRateChart({ data, matchingTotal, completedTotal }: PassRateChartProps) {
+  const theme = useTheme();
+  const varsPalette = theme.vars?.palette;
+  const divider = varsPalette?.divider ?? theme.palette.divider;
+  const textSecondary = varsPalette?.text.secondary ?? theme.palette.text.secondary;
+  const paper = varsPalette?.background.paper ?? theme.palette.background.paper;
+  const success = varsPalette?.success.main ?? theme.palette.success.main;
+  const warning = varsPalette?.warning.main ?? theme.palette.warning.main;
+  const error = varsPalette?.error.main ?? theme.palette.error.main;
   const emptyStateCopy =
     matchingTotal === 0
       ? 'No evaluations match the current filters.'
@@ -48,10 +57,21 @@ export default function PassRateChart({ data, matchingTotal, completedTotal }: P
       ) : (
         <ResponsiveContainer width="100%" height={220}>
           <BarChart data={data} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
-            <CartesianGrid strokeDasharray="3 3" vertical={false} />
-            <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-            <YAxis domain={[0, 100]} tickFormatter={(value) => `${value}%`} tick={{ fontSize: 12 }} />
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={divider} />
+            <XAxis dataKey="name" tick={{ fontSize: 12, fill: textSecondary }} axisLine={false} tickLine={false} />
+            <YAxis
+              domain={[0, 100]}
+              tickFormatter={(value) => `${value}%`}
+              tick={{ fontSize: 12, fill: textSecondary }}
+              axisLine={false}
+              tickLine={false}
+            />
             <Tooltip
+              contentStyle={{
+                borderRadius: 12,
+                border: `1px solid ${divider}`,
+                backgroundColor: paper,
+              }}
               formatter={(value, _name, item) => {
                 const total = item.payload?.total;
                 return [`${value}%${typeof total === 'number' ? ` (${total} completed)` : ''}`, 'Pass rate'];
@@ -62,7 +82,13 @@ export default function PassRateChart({ data, matchingTotal, completedTotal }: P
               {data.map((entry, index) => (
                 <Cell
                   key={`${entry.name}-${index}`}
-                  fill={entry.passRate >= 70 ? '#4caf50' : entry.passRate >= 40 ? '#ff9800' : '#f44336'}
+                  fill={
+                    entry.passRate >= 70
+                      ? success
+                      : entry.passRate >= 40
+                        ? warning
+                        : error
+                  }
                 />
               ))}
             </Bar>

@@ -1,5 +1,6 @@
 import { Button, Stack, Typography } from '@mui/material';
 import Link from 'next/link';
+import { SectionSurface } from '@/components/ui/editorial';
 
 export const REVIEWER_PAGINATION_LABEL = 'Reviewer pagination';
 
@@ -82,65 +83,68 @@ export default function ReviewerPagination({
   const items = getReviewerPaginationItems(page, totalPages);
 
   return (
-    <Stack
-      component="nav"
-      aria-label={ariaLabel}
-      direction="row"
-      spacing={0.75}
-      flexWrap="wrap"
-      useFlexGap
-      alignItems="center"
-      justifyContent="flex-end"
-    >
-      {page <= 1 ? (
-        <Button size="small" disabled>
-          Previous
-        </Button>
-      ) : (
-        <Button size="small" component={Link} href={getHref(page - 1)}>
-          Previous
-        </Button>
-      )}
+    <SectionSurface sx={{ p: 1.25 }}>
+      <Stack
+        component="nav"
+        aria-label={ariaLabel}
+        direction="row"
+        spacing={0.75}
+        flexWrap="wrap"
+        useFlexGap
+        alignItems="center"
+        justifyContent="flex-end"
+      >
+        {page <= 1 ? (
+          <Button size="small" variant="outlined" disabled>
+            Previous
+          </Button>
+        ) : (
+          <Button size="small" variant="outlined" component={Link} href={getHref(page - 1)}>
+            Previous
+          </Button>
+        )}
 
-      {items.map((item, index) => {
-        if (item === 'ellipsis') {
-          return (
-            <Typography key={`ellipsis-${index}`} component="span" color="text.secondary" aria-hidden="true">
-              …
-            </Typography>
-          );
-        }
+        {items.map((item, index) => {
+          if (item === 'ellipsis') {
+            return (
+              <Typography key={`ellipsis-${index}`} component="span" color="text.secondary" aria-hidden="true" sx={{ px: 0.5 }}>
+                …
+              </Typography>
+            );
+          }
 
-        if (item === page) {
+          if (item === page) {
+            return (
+              <Button key={item} size="small" variant="contained" aria-current="page" disableElevation>
+                {item}
+              </Button>
+            );
+          }
+
           return (
-            <Button key={item} size="small" variant="contained" aria-current="page" disableElevation>
+            <Button
+              key={item}
+              size="small"
+              variant="outlined"
+              component={Link}
+              href={getHref(item)}
+              aria-label={`Go to page ${item}`}
+            >
               {item}
             </Button>
           );
-        }
+        })}
 
-        return (
-          <Button
-            key={item}
-            size="small"
-            component={Link}
-            href={getHref(item)}
-            aria-label={`Go to page ${item}`}
-          >
-            {item}
+        {page >= totalPages ? (
+          <Button size="small" variant="outlined" disabled>
+            Next
           </Button>
-        );
-      })}
-
-      {page >= totalPages ? (
-        <Button size="small" disabled>
-          Next
-        </Button>
-      ) : (
-        <Button size="small" component={Link} href={getHref(page + 1)}>
-          Next
-        </Button>
-      )}
-    </Stack>
+        ) : (
+          <Button size="small" variant="outlined" component={Link} href={getHref(page + 1)}>
+            Next
+          </Button>
+        )}
+      </Stack>
+    </SectionSurface>
   );
 }

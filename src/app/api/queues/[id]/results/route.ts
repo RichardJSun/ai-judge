@@ -52,7 +52,7 @@ function buildAggregateQuery(
   queueId: string,
   filters: Pick<ResultsQueryFilters, 'judgeIds' | 'questionIds' | 'verdicts'>
 ) {
-  let query = supabase
+  const query = supabase
     .from('evaluations')
     .select(
       `judge_id, verdict, status,
