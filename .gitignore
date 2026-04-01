@@ -10,38 +10,35 @@
 !.yarn/releases
 !.yarn/versions
 
-# testing
-/coverage
-
-# next.js
+# build output
 /.next/
 /out/
-
-# production
 /build
+dist/
+coverage/
+.cache/
+tmp/
+target/
+vendor/
 
-# misc
-.DS_Store
-*.pem
+# env files
+.env*
+!.env.example
 
-# debug
+# logs
+*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
-
-# vercel
+# next.js / typescript
 .vercel
-
-# typescript
 *.tsbuildinfo
 next-env.d.ts
 
-# ── GSD baseline (auto-generated) ──
-.gsd
+# editor / OS
+.DS_Store
 Thumbs.db
 *.swp
 *.swo
@@ -49,22 +46,21 @@ Thumbs.db
 .idea/
 .vscode/
 *.code-workspace
-.env
-.env.*
-!.env.example
-node_modules/
-.next/
-dist/
-build/
+
+# python
 __pycache__/
 *.pyc
 .venv/
 venv/
-target/
-vendor/
-*.log
-coverage/
-.cache/
-tmp/
 
+# misc
+*.pem
+.gsd
 .bg-shell/
+.artifacts/
+.planning/
+.claude/*
+!.claude/skills/
+!.claude/skills/**
+.claude/worktrees/
+.claude/test.js

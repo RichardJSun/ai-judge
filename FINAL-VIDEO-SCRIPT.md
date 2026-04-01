@@ -1,12 +1,12 @@
-# Video Script — AI Judge Demo (~3.5 minutes)
+# Video Script — AI Judge Demo (~4 minutes)
 
-Target: a concise Loom walkthrough that hits every requirement the spec asks for, calls out bonus features, and names trade-offs on camera.
+Target: a concise Loom walkthrough that covers the required flow, names the key bonus features that are actually implemented, and keeps the trade-offs accurate.
 
 ---
 
 ## 0. Intro (~15 seconds)
 
-> This is AI Judge — a web app for uploading submission queues, configuring AI judges, running real LLM-backed evaluations, and reviewing the results. It's built with Next.js 16, React 19, TypeScript, and Supabase. I'll walk through the full reviewer workflow.
+> This is AI Judge, a Next.js 16, React 19, TypeScript, and Supabase app for uploading submission queues, configuring AI judges, running real LLM-backed evaluations through AI Gateway, and reviewing persisted results. I'll walk through the full reviewer flow from upload to audit detail.
 
 ---
 
@@ -14,15 +14,19 @@ Target: a concise Loom walkthrough that hits every requirement the spec asks for
 
 Open `http://localhost:3000`.
 
-> The app opens on Upload Submissions. I'll drag in a JSON queue file.
+> The app redirects straight to Upload Submissions. I'll drag in a JSON queue file.
 >
-> After upload, the app shows a parsed summary — queues, submissions, question templates, answers, and attachments — all persisted in Supabase, so everything survives reloads.
+> After upload, the app shows a parsed summary for queues, submissions, questions, answers, and attachments, and all of that is persisted in Supabase so it survives reloads.
 
 On screen:
 - Show the drag-and-drop area.
 - Drop the sample file.
-- Pause on the success panel and count chips.
+- Pause on the success panel.
 - Click **View Queues**.
+
+Brief mention:
+
+> From the queue list, each queue has a reviewer path for submissions, assignments, runs, and results.
 
 ---
 
@@ -30,7 +34,7 @@ On screen:
 
 Go to **Judges**.
 
-> The Judges page manages persisted judge configurations. Each judge stores a name, system prompt, model, and active/inactive status.
+> The Judges page manages persisted judge configurations. Each judge stores a name, system prompt or rubric, a target model, and an active flag.
 
 On screen:
 - Click **New Judge**.
@@ -41,29 +45,30 @@ On screen:
 - Optionally create a second judge:
   - Name: `Reasoning Quality`
   - Model: `google/gemini-2.0-flash`
-- Click **Manage** on a judge, show edit.
-- Toggle one inactive and reactivate it.
+- Click **Manage** on an existing judge and show the edit flow.
+- Toggle a judge inactive, then reactivate it.
 
-> Judges are deactivated rather than deleted, so assignment history and evaluation context stay inspectable.
+> Judges are deactivated instead of deleted, so persisted assignment history and past evaluations stay inspectable.
 
 ---
 
-## 3. Assign Judges to Questions (~30 seconds)
+## 3. Assign Judges to Questions (~35 seconds)
 
-Go to **Queues**, open a queue, then click **Assign Judges**.
+Go back to **Queues**, open a queue, then click **Assign Judges**.
 
-> This is the assignment matrix. I map judges to questions here — one or more judges per question.
+> This is the assignment matrix. I can assign one or more judges per question, and those selections are persisted for later runs.
 >
-> If I expand a row before checking a new judge, I can choose which prompt fields that new assignment will include — question text, answer, and question type. That's one of the bonus features from the spec.
+> If I expand a question row before checking a new active judge, I can choose which prompt fields that new assignment will send: question text, answer, and question type. That's one of the implemented bonus features.
 
 On screen:
 - Show the matrix.
-- Check one or more assignments.
-- Expand a row and show the prompt field selector.
+- Expand a question row.
+- Show the prompt field selector.
+- Check one or more judge assignments.
 
 Brief mention:
 
-> There's also a "Forward stored attachments" toggle here — a bonus capability for sending submission-linked files to multimodal models during evaluation.
+> Existing persisted assignments also show whether attachment forwarding is enabled. That toggle is stored per assignment and controls whether stored submission attachments are forwarded during evaluation.
 
 ---
 
@@ -71,57 +76,59 @@ Brief mention:
 
 Go back to the queue page and click **Run Evaluations**.
 
-> Before starting, the app previews how many evaluations will be created from the current assignments. When I confirm, it persists the run and schedules real model calls through AI Gateway. The run page polls for progress as evaluations complete.
+> Before starting, the app shows a preview with the total planned evaluations and excludes any assignments that point at inactive judges. When I confirm, it persists the run and schedules real model calls through AI Gateway. The run page then polls persisted progress.
 
 On screen:
-- Show the preview.
+- Open the preview dialog.
+- Point out the total planned calls.
 - Start the run.
-- Show live progress on the run page.
+- Show the live run progress panel.
 
-> Each evaluation stores the verdict, reasoning, model used, token count, latency, retry count, and any error text — all persisted in Supabase.
+> The run summary stays truthful with total, completed, and error counts. Each evaluation persists the verdict, reasoning, model used, token count, latency, retry count, prompt snapshot, and any terminal error text.
 
 ---
 
-## 5. Results View (~45 seconds)
+## 5. Results View (~50 seconds)
 
 Click **View Results**.
 
-> The results page shows an aggregate pass rate at the top — based on completed evaluations only, so errors don't silently inflate the number. Next to it is an animated per-judge pass-rate chart — another bonus from the spec.
+> The results page is the reviewer surface for persisted evaluations. At the top, it shows aggregate pass rate based only on completed evaluations, along with matching and completed counts. Next to that is an animated per-judge pass-rate chart.
 
 On screen:
-- Show the pass-rate percentage.
-- Show the animated bar chart.
+- Show the metric cards.
+- Show the animated chart.
 
-> The table has the columns the spec requires: Submission, Question, Judge, Verdict, Reasoning, and Created. I can filter by judge, question, and verdict, and the filters apply to both the table and the aggregate calculations.
+> The table includes the spec's required fields: Submission, Question, Judge, Verdict, Reasoning, and Created. I can filter by judge, question, and verdict, and those filters apply consistently to the rows, the pass-rate summary, and the chart.
 
 On screen:
 - Apply a judge filter.
-- Apply a verdict filter.
+- Apply a question or verdict filter.
 - Expand a row.
 
-> Each row also has expandable audit detail — model used, tokens, latency, retry count, prompt snapshot, and error text.
+> Expanding a row reveals audit detail like model used, tokens, latency, retries, prompt snapshot, the plan marker for attachment handling, and any error text.
 
 ---
 
-## 6. Submission Detail (~15 seconds)
+## 6. Submission Detail (~20 seconds)
 
 Click a **submission ID** from the results table.
 
-> Submission IDs link into a dedicated detail page showing the full question-and-answer context. If the submission has attachments, the page shows attachment metadata and storage status.
+> Submission IDs deep-link into a queue-scoped submission detail page. This shows the full ordered question set, the stored answers, and reviewer-safe attachment metadata with durable storage status.
 
 On screen:
-- Show questions and answers.
-- Show attachment status if present.
+- Show the question cards.
+- Open one raw payload if useful.
+- Show the attachments section and storage status copy.
 
 ---
 
-## 7. Closing (~30 seconds)
+## 7. Closing (~35 seconds)
 
-> To summarize the trade-offs I made: evaluation work runs in-process using Next.js `after()` — simple for a take-home, but a real deployment would use a separate worker. Results are queue-scoped rather than run-scoped, which is better for reviewer history. And the run page polls instead of using Supabase Realtime, keeping the runtime smaller.
+> The main trade-offs are these: evaluation work is scheduled in-process with Next.js `after()`, which keeps the take-home simple but would become a dedicated worker in production. Results are queue-scoped rather than run-scoped, which is better for history but means repeat runs accumulate on the same results page. And run progress uses polling instead of Realtime to keep the implementation smaller.
 >
-> For bonus features: prompt field selection lets users control what newly created assignments send to the judge, the per-judge chart animates, and attachment forwarding is capability-gated — if a model can't consume the file type, the app records an explicit blocked diagnostic instead of silently dropping it.
+> For bonus features, the app supports prompt field selection for new assignments, animated per-judge pass-rate charts, submission detail pages with stored attachment status, and capability-gated attachment forwarding. Unsupported models or media types are not silently ignored; they surface explicit blocked diagnostics in the audit trail.
 >
-> Time spent was roughly 32 hours across March 27 to 29. Thanks for reviewing.
+> Time spent was about 38 hours.
 
 ---
 
@@ -131,11 +138,11 @@ Before recording:
 
 - Start the app with `bun dev`.
 - Make sure Supabase and AI Gateway credentials are valid.
-- If showing attachments, use an attachment-backed fixture.
-- Optionally pre-create a queue and judges for a cleaner run.
+- If you want to show attachment handling, use an attachment-backed fixture.
+- Optionally pre-create a queue and judges for a cleaner recording.
 
 ---
 
-## One-paragraph version for a submission email
+## One-paragraph Version For A Submission Email
 
-> AI Judge is a Next.js 16 + React 19 + TypeScript + Supabase review workflow. Reviewers upload queue JSON, create and manage AI judges, assign them per question, choose prompt fields when creating new assignments, run real LLM-backed evaluations, and inspect persisted results with filters, animated pass-rate charts, and per-evaluation audit detail. Bonus features include prompt field selection, animated per-judge charts, and capability-gated multimodal attachment forwarding. Time spent: ~32 hours across March 27–29.
+> AI Judge is a Next.js 16 + React 19 + TypeScript + Supabase reviewer workflow. Reviewers upload queue JSON, create and manage persisted judges, assign them per question, choose prompt fields for new assignments, run real LLM-backed evaluations through AI Gateway, and inspect queue-scoped results with filters, pass-rate summaries, animated per-judge charts, expandable audit detail, and submission detail pages. Bonus work includes capability-gated attachment forwarding and reviewer-visible attachment storage status. Time spent: about 38 hours.
