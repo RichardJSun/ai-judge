@@ -17,7 +17,7 @@ import {
   appShellMobileTopBarSx,
   appShellRootSx,
 } from './shell-layout';
-import { editorialRadius } from '@/components/ui/theme';
+import { editorialRadius, shellTypography } from '@/components/ui/theme';
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -44,10 +44,24 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               <MenuRoundedIcon />
             </IconButton>
             <Box>
-              <Typography variant="overline" color="text.secondary">
+              <Typography
+                component="p"
+                sx={{
+                  ...shellTypography.brandTitle,
+                  fontSize: '1.2rem',
+                }}
+              >
                 AI Judge
               </Typography>
-              <Typography variant="body2" fontWeight={700}>
+              <Typography
+                component="span"
+                color="text.secondary"
+                sx={{
+                  ...shellTypography.metaLabel,
+                  display: 'block',
+                  mt: 0.25,
+                }}
+              >
                 Review workspace
               </Typography>
             </Box>

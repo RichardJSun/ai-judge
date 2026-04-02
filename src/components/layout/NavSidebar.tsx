@@ -19,7 +19,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import ThemeModeControl from '@/components/ui/ThemeModeControl';
 import { SectionSurface } from '@/components/ui/editorial';
-import { editorialRadius } from '@/components/ui/theme';
+import { editorialRadius, shellTypography } from '@/components/ui/theme';
 import { navSidebarDrawerSx, navSidebarSurfaceHeightSx } from './shell-layout';
 
 const navItems = [
@@ -71,10 +71,23 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
               </Typography>
             </Box>
             <Box minWidth={0}>
-              <Typography variant="h5" sx={{ fontSize: '1.35rem' }}>
+              <Typography
+                component="p"
+                sx={{
+                  ...shellTypography.brandTitle,
+                  fontSize: { xs: '1.5rem', lg: '1.6rem' },
+                }}
+              >
                 AI Judge
               </Typography>
-              <Typography variant="overline" color="text.secondary">
+              <Typography
+                component="span"
+                color="text.secondary"
+                sx={{
+                  ...shellTypography.metaLabel,
+                  display: 'block',
+                }}
+              >
                 Editorial ops desk
               </Typography>
             </Box>
@@ -149,7 +162,14 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
           }}
         >
           <Box>
-            <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+            <Typography
+              component="span"
+              color="text.secondary"
+              sx={{
+                ...shellTypography.metaLabel,
+                display: 'block',
+              }}
+            >
               Appearance
             </Typography>
             <Typography variant="body2" fontWeight={600}>

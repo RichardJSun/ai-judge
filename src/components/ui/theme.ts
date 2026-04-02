@@ -1,9 +1,24 @@
 import { createTheme } from '@mui/material/styles';
 
-const bodyFontFamily = 'var(--font-geist-sans), system-ui, sans-serif';
-const displayFontFamily = 'var(--font-dm-serif-display), Georgia, serif';
+export const bodyFontFamily = 'var(--font-geist-sans), system-ui, sans-serif';
+export const displayFontFamily = 'var(--font-dm-serif-display), Georgia, serif';
 export const monoFontFamily =
   '"SFMono-Regular", "SF Mono", ui-monospace, Menlo, Monaco, Consolas, "Liberation Mono", monospace';
+export const shellTypography = {
+  brandTitle: {
+    fontFamily: displayFontFamily,
+    fontWeight: 400,
+    lineHeight: 1.02,
+    letterSpacing: '-0.03em',
+  },
+  metaLabel: {
+    fontSize: '0.72rem',
+    fontWeight: 700,
+    lineHeight: 1.5,
+    letterSpacing: '0.16em',
+    textTransform: 'uppercase',
+  },
+} as const;
 export const editorialRadius = {
   surface: 12,
   control: 10,
